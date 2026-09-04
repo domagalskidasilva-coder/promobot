@@ -46,11 +46,21 @@ function OfferCard({ item }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <DiscountBadge value={a?.real_discount_pct} />
           <ScoreBadge score={a?.score} />
+          {o.coupon_text ? (
+            <span className="badge border-dashed border-brand-300 bg-brand-50 font-bold text-brand-800" title="Cupom aplicado no checkout do site">
+              {o.coupon_text}
+            </span>
+          ) : null}
         </div>
         <div className="mt-auto pt-2">
           <Link to={`/produto/${p.id}`} className="btn-secondary w-full btn-sm" aria-label={`Ver análise de ${p.title.slice(0, 60)}`}>
             Ver análise
           </Link>
+          {item.affiliate ? (
+            <p className="mt-1.5 text-center text-[10.5px] text-slate-400" title="Comprar por este link apoia o Promobot com comissão — sem custo para você">
+              link de afiliado
+            </p>
+          ) : null}
         </div>
       </div>
     </article>

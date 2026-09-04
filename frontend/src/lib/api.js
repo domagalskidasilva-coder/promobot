@@ -26,6 +26,8 @@ export const api = {
   product: (id) => req(`/api/product/${id}`),
   insights: () => req("/api/insights"),
   coupons: () => req("/api/coupons"),
+  affiliateConfig: () => req("/api/affiliate"),
+  saveAffiliateConfig: (payload) => req("/api/affiliate", { method: "POST", body: JSON.stringify(payload) }),
   sparklines: (ids) => req(`/api/sparklines?ids=${ids}`),
   status: () => req("/api/status"),
   keywords: () => req("/api/keywords"),

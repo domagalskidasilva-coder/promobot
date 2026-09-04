@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     # --- Palavras-chave iniciais (só na primeira execução) -----------------
     keywords: str = "ps5,rtx 4060,steam deck,notebook gamer"
 
+    # --- Links de afiliado (opcionais; vazio = desligado) ------------------
+    # Amazon Associados (associados.amazon.com.br): tag tipo "minhaloja-20"
+    affiliate_amazon_tag: str = ""
+    # Meli Afiliados (mercadolivre.com.br/afiliados): matt_word aparece nos
+    # links gerados no painel deles; matt_tool é opcional
+    affiliate_ml_matt_word: str = ""
+    affiliate_ml_matt_tool: str = ""
+    # Shopee Afiliados: template do link curto com {url} (avançado)
+    affiliate_shopee_template: str = ""
+
     # --- GitHub Actions (dispara coleta pelo botão do painel na Vercel) ----
     github_token: str = ""  # PAT com escopo repo + workflow
     github_repo: str = ""   # ex.: "usuario/promobot"

@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select, text
 
 from .. import db, pipeline
 from ..collector import collector
+from ..affiliate import affiliatize
 from ..config import get_settings
 from ..models import (
     Analysis,
@@ -45,6 +46,11 @@ def require_login(request: Request):
 # --------------------------------------------------------------------------
 # queries compartilhadas
 # --------------------------------------------------------------------------
+def _aff_url(marketplace: str, url: str | None):
+    s = get_settings()
+    return affiliatize(marketplace, url, s)
+
+
 def _filtered_stmt(marketplace: str | None, q: str | None, category: str | None,
                    min_score: float | None, max_price: float | None, hot_only: bool,
                    sort: str):
@@ -194,10 +200,12 @@ async def api_offers(marketplace: str | None = None, q: str | None = None,
                     flags = []
             items.append({
                 "product": {"id": p.id, "title": p.title, "marketplace": p.marketplace,
-                            "url": p.url, "image_url": p.image_url, "category": p.category},
+                            "url": _aff_url(p.marketplace, p.url)[0],
+                            "image_url": p.image_url, "category": p.category},
                 "offer": {"price": o.price, "list_price": o.list_price,
                           "updated_at": o.updated_at.isoformat(), "in_stock": o.in_stock,
                           "coupon_text": o.coupon_text},
+                "affiliate": _aff_url(p.marketplace, p.url)[1],
                 "analysis": {"score": a.score, "real_discount_pct": a.real_discount_pct,
                              "vs_avg30_pct": a.vs_avg30_pct, "is_hist_min": a.is_hist_min,
                              "summary": a.summary, "flags": flags},
@@ -234,7 +242,9 @@ async def api_product(product_id: int, period: str = "all"):
         prices = [h.price for h in history]
         return JSONResponse({
             "product": {"id": product.id, "title": product.title, "marketplace": product.marketplace,
-                        "url": product.url, "image_url": product.image_url, "category": product.category},
+                        "url": _aff_url(product.marketplace, product.url)[0],
+                        "image_url": product.image_url, "category": product.category,
+                        "affiliate": _aff_url(product.marketplace, product.url)[1]},
             "offer": {"price": offer.price if offer else None,
                       "list_price": offer.list_price if offer else None,
                       "in_stock": offer.in_stock if offer else True,
@@ -282,7 +292,7 @@ async def api_coupons(marketplace: str | None = None, _: bool = Depends(require_
             {"id": o.id, "marketplace": p.marketplace,
              "market_label": MARKET_LABEL.get(p.marketplace, p.marketplace),
              "code": "", "description": o.coupon_text,
-             "url": p.url, "title": p.title[:80],
+             "url": _aff_url(p.marketplace, p.url)[0], "title": p.title[:80],
              "product_id": p.id, "image_url": p.image_url,
              "price": o.price,
              "last_seen": o.updated_at.isoformat()}
@@ -728,3 +738,54 @@ async def api_sparklines(ids: str, _: bool = Depends(require_login)):
     for pid, price, _ts in rows:
         out.setdefault(str(pid), []).append(price)
     return JSONResponse({k: v[-24:] for k, v in out.items()})
+
+
+AFFILIATE_KEYS = ("affiliate_amazon_tag", "affiliate_ml_matt_word",
+                  "affiliate_ml_matt_tool", "affiliate_shopee_template")
+
+
+@router.get("/api/affiliate")
+async def api_affiliate_get(_: bool = Depends(require_login)):
+    s = get_settings()
+    return JSONResponse({
+        "affiliate_amazon_tag": s.affiliate_amazon_tag,
+        "affiliate_ml_matt_word": s.affiliate_ml_matt_word,
+        "affiliate_ml_matt_tool": s.affiliate_ml_matt_tool,
+        "affiliate_shopee_template": s.affiliate_shopee_template,
+    })
+
+
+@router.post("/api/affiliate")
+async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(require_login)):
+    """Salva os IDs de afiliado no arquivo .env da máquina onde o coletor roda.
+
+    Na VPS (Docker no host), escreve em /opt/promobot/.env e reinicia o
+    container para o processo reler. Na Vercel, os valores são somente leitura
+    (configurar nas Environment Variables da Vercel).
+    """
+    from pathlib import Path
+
+    env_path = Path("/opt/promobot/.env")
+    if not env_path.is_file():
+        raise HTTPException(status_code=400, detail="só é editável na máquina do coletor (VPS)")
+
+    allowed = {k: str(body.get(k, "")).strip() for k in AFFILIATE_KEYS if k in body}
+    lines = env_path.read_text().splitlines()
+    for k, v in allowed.items():
+        if v and "'" in v:
+            raise HTTPException(status_code=422, detail=f"valor inválido em {k}")
+        replaced = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{k}=") or line.startswith(f"# {k}="):
+                lines[i] = f"{k}={v}"
+                replaced = True
+                break
+        if not replaced:
+            lines.append(f"{k}={v}")
+    env_path.write_text("\n".join(lines) + "\n")
+
+    # reinicia o coletor para reler as variáveis
+    import subprocess
+
+    subprocess.Popen(["docker", "compose", "restart", "promobot"], cwd="/opt/promobot")
+    return JSONResponse({"ok": True, "restarted": True})

@@ -26,6 +26,7 @@ import { LoginPage } from "./pages/Login"
 import { InsightsPage } from "./pages/Insights"
 import { StoresPage } from "./pages/Stores"
 import { CouponsPage } from "./pages/Coupons"
+import { AffiliatePage } from "./pages/Affiliate"
 
 const NAV = [
   { to: "/", label: "Ofertas", icon: Flame, end: true },
