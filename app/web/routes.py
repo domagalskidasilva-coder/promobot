@@ -33,7 +33,7 @@ from ..models import (
 
 router = APIRouter()
 
-MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon", "shopee": "Shopee"}
+MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon"}
 
 
 def require_login(request: Request):
@@ -348,14 +348,12 @@ async def api_delete_keyword(kw_id: int, _: bool = Depends(require_login)):
 # --------------------------------------------------------------------------
 # lojas monitoradas
 # --------------------------------------------------------------------------
-def _detect_marketplace(url: str, query: str) -> str:
+def _detect_marketplace(url: str, query: str) -> str:  # noqa: shopee removido
     u = (url or "").lower()
     if "mercadolivre" in u or "mercadolibre" in u:
         return "ml"
     if "amazon." in u:
         return "amazon"
-    if "shopee" in u:
-        return "shopee"
     if url.startswith("http"):
         return "fisica"  # loja física/redes sociais com URL própria
     return "ml"  # default: busca por nome no ML
@@ -470,7 +468,7 @@ async def api_status(_: bool = Depends(require_login)):
     settings = get_settings()
     with db.SessionLocal() as db_:
         sources = {}
-        for scope, mp in (("scraper:ml", "ml"), ("scraper:amazon", "amazon"), ("scraper:shopee", "shopee")):
+        for scope, mp in (("scraper:ml", "ml"), ("scraper:amazon", "amazon")):
             ok = db_.execute(
                 select(EventLog).where(EventLog.scope == scope, EventLog.level == "info")
                 .order_by(EventLog.created_at.desc()).limit(1)

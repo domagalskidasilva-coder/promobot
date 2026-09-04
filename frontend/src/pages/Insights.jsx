@@ -6,7 +6,7 @@ import { brl0 } from "../lib/format"
 import { ErrorState, LoadingState, MarketBadge, Page, PageHeader } from "../components/ui"
 import { BarChart, CycleBars, HBarList } from "../components/charts"
 
-const MKT_COLORS = { "Mercado Livre": "#1d4ed8", Amazon: "#b45309", Shopee: "#047857" }
+const MKT_COLORS = { "Mercado Livre": "#1d4ed8", Amazon: "#b45309" }
 
 function AnalysisBlock({ question, title, unit, children, interpretation, empty }) {
   return (

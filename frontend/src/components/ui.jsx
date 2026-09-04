@@ -67,7 +67,7 @@ export function DiscountBadge({ value }) {
 }
 
 export function MarketBadge({ code, label }) {
-  const short = code === "ml" ? "ML" : code === "amazon" ? "Amazon" : code === "shopee" ? "Shopee" : label || code
+  const short = code === "ml" ? "ML" : code === "amazon" ? "Amazon" : label || code
   return (
     <span className="badge badge-neutral" title={label || short}>
       {short}

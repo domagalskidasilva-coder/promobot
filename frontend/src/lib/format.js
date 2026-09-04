@@ -33,12 +33,12 @@ export function pct(value, digits = 0) {
 }
 
 export function marketLabel(code, fallback) {
-  const map = { ml: "Mercado Livre", amazon: "Amazon", shopee: "Shopee" }
+  const map = { ml: "Mercado Livre", amazon: "Amazon" }
   return map[code] || fallback || code || "—"
 }
 
 export function marketShort(code) {
-  const map = { ml: "ML", amazon: "Amazon", shopee: "Shopee" }
+  const map = { ml: "ML", amazon: "Amazon" }
   return map[code] || code || "—"
 }
 

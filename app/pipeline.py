@@ -199,7 +199,6 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
     from .ai.analyst import analyze_pending
     from .scrapers.amazon import AmazonScraper
     from .scrapers.mercadolivre import MercadoLivreScraper
-    from .scrapers.shopee import ShopeeScraper
     from .models import Store
 
     settings = get_settings()
@@ -208,7 +207,6 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
     scrapers: dict[str, object] = {
         "ml": MercadoLivreScraper(),
         "amazon": AmazonScraper(),
-        "shopee": ShopeeScraper(),
     }
     if scraper_names:
         scrapers = {k: v for k, v in scrapers.items() if k in scraper_names}
@@ -220,7 +218,8 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
         ).scalars().all()
     stores_by_mp: dict[str, list] = {}
     for st_ in store_rows:
-        stores_by_mp.setdefault(st_.marketplace, []).append(st_)
+        if st_.marketplace != "shopee":
+            stores_by_mp.setdefault(st_.marketplace, []).append(st_)
 
     for name, scraper in scrapers.items():
         breaker = _breakers.setdefault(name, _make_breaker())
@@ -269,6 +268,12 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
         except Exception:
             log.exception("Caça de cupons falhou no ciclo")
 
+    # expiração: produtos sem desconto/cupom saem do sistema após N ciclos
+    try:
+        stats["expired"] = expire_products()["removed"]
+    except Exception:
+        log.exception("Expiração de produtos falhou")
+
     db.log_event("pipeline", f"Ciclo concluído: {stats}")
     return stats
 
@@ -276,12 +281,103 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
 _breakers: dict[str, object] = {}
 _cycle_count = 0
 
+def _has_deal_value(price: float, real_discount_pct: float | None, coupon_text: str | None) -> bool:
+    """Regra de permanência: desconto real >= 5% OU cupom ativo na oferta."""
+    if coupon_text:
+        return True
+    return (real_discount_pct or 0) >= 5.0
 
-def _make_breaker():
-    settings = get_settings()
-    from .scrapers.base import CircuitBreaker
 
-    return CircuitBreaker(settings.breaker_fail_threshold, settings.breaker_cooldown_hours * 3600)
+def expire_products(max_cycles_without_deal: int = 6) -> dict:
+    """Remove produtos que perderam o valor promocional.
+
+    Regra de permanência: desconto real >= 5% OU menor preço histórico OU
+    cupom ativo. Quem não cumpre acumula ciclos 'sem deal'; ao atingir o
+    limite, sai do banco (watchlist → análise → histórico → oferta → produto).
+    Tudo em SQL em conjunto — rápido mesmo com Neon remoto.
+    """
+    from sqlalchemy import text as _text
+
+    from .models import AppControl
+
+    removed = 0
+    with db.SessionLocal() as db_:
+        # 1) zera o streak de quem TEM valor promocional
+        db_.execute(_text(
+            """
+            UPDATE app_control ac SET value = '0', updated_at = now()
+            FROM (
+                SELECT o.product_id FROM offers o
+                LEFT JOIN offers_analysis a ON a.offer_id = o.id
+                WHERE coalesce(a.real_discount_pct, 0) >= 5
+                   OR a.is_hist_min
+                   OR coalesce(a.vs_avg30_pct, 0) >= 25
+                   OR o.coupon_text IS NOT NULL
+            ) t
+            WHERE ac.key = 'no_deal:' || t.product_id AND ac.value <> '0'
+            """
+        ))
+        # 2) incrementa o streak de quem NÃO tem (e cria o primeiro)
+        db_.execute(_text(
+            """
+            INSERT INTO app_control (key, value, updated_at)
+            SELECT 'no_deal:' || o.product_id, '1', now()
+            FROM offers o
+            LEFT JOIN offers_analysis a ON a.offer_id = o.id
+            LEFT JOIN app_control ac ON ac.key = 'no_deal:' || o.product_id
+            WHERE NOT (
+                coalesce(a.real_discount_pct, 0) >= 5
+                OR a.is_hist_min
+                OR coalesce(a.vs_avg30_pct, 0) >= 25
+                OR o.coupon_text IS NOT NULL
+            )
+            ON CONFLICT (key) DO UPDATE
+              SET value = ((coalesce(app_control.value, '0')::int) + 1)::text,
+                  updated_at = now()
+            """
+        ))
+        # 3) remove quem estourou o limite (ordem respeita as FKs)
+        result = db_.execute(_text(
+            f"""
+            WITH expired AS (
+                SELECT substr(key, 9)::int AS pid
+                FROM app_control
+                WHERE key LIKE 'no_deal:%' AND value::int >= :max_cycles
+            )
+            SELECT count(*) FROM expired
+            """
+        ), {"max_cycles": max_cycles_without_deal})
+        expired_ids = [r[0] for r in db_.execute(_text(
+            f"""
+            SELECT substr(key, 9)::int AS pid
+            FROM app_control
+            WHERE key LIKE 'no_deal:%' AND value::int >= :max_cycles
+            """
+        ), {"max_cycles": max_cycles_without_deal}).all()]
+        removed = len(expired_ids)
+        if expired_ids:
+            db_.execute(_text(
+                "DELETE FROM watch_items WHERE product_id = ANY(:ids)"),
+                {"ids": expired_ids})
+            db_.execute(_text(
+                "DELETE FROM offers_analysis WHERE offer_id IN "
+                "(SELECT id FROM offers WHERE product_id = ANY(:ids))"),
+                {"ids": expired_ids})
+            db_.execute(_text(
+                "DELETE FROM price_history WHERE product_id = ANY(:ids)"),
+                {"ids": expired_ids})
+            db_.execute(_text(
+                "DELETE FROM offers WHERE product_id = ANY(:ids)"),
+                {"ids": expired_ids})
+            db_.execute(_text(
+                "DELETE FROM products WHERE id = ANY(:ids)"),
+                {"ids": expired_ids})
+            db_.execute(_text(
+                "DELETE FROM app_control WHERE key LIKE 'no_deal:%' AND "
+                "substr(key, 9)::int = ANY(:ids)"),
+                {"ids": expired_ids})
+        db_.commit()
+    return {"removed": removed}
 
 
 def _active_keywords() -> list[str]:
@@ -304,7 +400,7 @@ async def run_coupons_cycle() -> dict:
     stats = {"found": 0, "new": 0}
     from .models import Coupon as CouponModel
 
-    for mp in ("ml", "amazon", "shopee"):
+    for mp in ("ml", "amazon"):
         try:
             raw = await collect_marketplace(mp)
         except Exception as exc:

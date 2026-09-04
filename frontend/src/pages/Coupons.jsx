@@ -5,7 +5,7 @@ import { api } from "../lib/api"
 import { timeago } from "../lib/format"
 import { EmptyState, LoadingState, Page, PageHeader } from "../components/ui"
 
-const MKT_COLORS = { ml: "#ffe600", amazon: "#ff9900", shopee: "#ee4d2d" }
+const MKT_COLORS = { ml: "#b45309", amazon: "#1d4ed8" }
 
 function CouponCard({ c, i }) {
   const [copied, setCopied] = useState(false)
@@ -71,7 +71,7 @@ export function CouponsPage() {
       />
 
       <div className="flex flex-wrap gap-2">
-        {[["", "Todos"], ["ml", "Mercado Livre"], ["amazon", "Amazon"], ["shopee", "Shopee"]].map(([id, label]) => (
+        {[["", "Todos"], ["ml", "Mercado Livre"], ["amazon", "Amazon"]].map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)}
                   className={`btn btn-sm ${filter === id ? "" : "btn-ghost"}`}>{label}</button>
         ))}

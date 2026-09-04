@@ -13,9 +13,6 @@ const FIELDS = [
   { key: "affiliate_ml_matt_tool", label: "Mercado Livre — matt_tool (opcional)",
     hint: "Código de ferramenta do Meli Afiliados (opcional).",
     placeholder: "12345678" },
-  { key: "affiliate_shopee_template", label: "Shopee — template de link (avançado)",
-    hint: "Modelo do link curto com {url} no lugar do destino. Ex.: https://s.shopee.com.br/ABC?url={url}",
-    placeholder: "https://s.shopee.com.br/ABC?url={url}" },
 ]
 
 export function AffiliatePage() {
@@ -68,7 +65,7 @@ export function AffiliatePage() {
           <li>• O link de afiliado é gerado <b>na hora da entrega</b> (API/painel), sem alterar o banco.</li>
           <li>• Feed, página do produto, cupons e watchlist entregam links com sua tag automaticamente.</li>
           <li>• Cards com <b>“link de afiliado”</b> indicam que o link saiu com sua tag.</li>
-          <li>• Programas: <a className="text-brand-700 underline" href="https://associados.amazon.com.br/" target="_blank" rel="noopener noreferrer">Amazon Associados <ExternalLink className="inline h-3 w-3" /></a> · <a className="text-brand-700 underline" href="https://www.mercadolivre.com.br/afiliados" target="_blank" rel="noopener noreferrer">Meli Afiliados <ExternalLink className="inline h-3 w-3" /></a> · <a className="text-brand-700 underline" href="https://affiliate.shopee.com.br/" target="_blank" rel="noopener noreferrer">Shopee Afiliados <ExternalLink className="inline h-3 w-3" /></a></li>
+          <li>• Programas: <a className="text-brand-700 underline" href="https://associados.amazon.com.br/" target="_blank" rel="noopener noreferrer">Amazon Associados <ExternalLink className="inline h-3 w-3" /></a> · <a className="text-brand-700 underline" href="https://www.mercadolivre.com.br/afiliados" target="_blank" rel="noopener noreferrer">Meli Afiliados <ExternalLink className="inline h-3 w-3" /></a></li>
         </ul>
         {!anyOn && <p className="mt-2 text-xs text-slate-500">Nenhum ID configurado ainda — os links estão originais.</p>}
       </div>

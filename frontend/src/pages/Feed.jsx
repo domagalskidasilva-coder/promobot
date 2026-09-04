@@ -89,7 +89,6 @@ function Filters({ filters, onChange, onClear, hasActive, open, onToggle }) {
               <option value="">Todos</option>
               <option value="ml">Mercado Livre</option>
               <option value="amazon">Amazon</option>
-              <option value="shopee">Shopee</option>
             </select>
           </Field>
           <Field id="f-cat" label="Categoria">

@@ -7,7 +7,6 @@ import { ErrorState, LoadingState, Page, PageHeader } from "../components/ui"
 const SITES = [
   { id: "ml", label: "Mercado Livre" },
   { id: "amazon", label: "Amazon" },
-  { id: "shopee", label: "Shopee" },
 ]
 
 function siteStatus(info) {

@@ -33,7 +33,7 @@ FLAG_LABELS = {
     "cupom_confuso": "⚠️ Cupom com letra miúda",
 }
 
-MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon", "shopee": "Shopee"}
+MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon"}
 
 
 def _verdict_badge(score: int | None) -> str:

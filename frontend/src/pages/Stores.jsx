@@ -36,7 +36,7 @@ export function StoresPage() {
     <Page>
       <PageHeader
         title="Lojas monitoradas"
-        description="Cadastre lojas do Mercado Livre, Amazon ou Shopee — o bot varre os produtos de cada loja a cada ciclo, junto com as palavras-chave."
+        description="Cadastre lojas do Mercado Livre ou Amazon — o bot varre os produtos de cada loja a cada ciclo, junto com as palavras-chave."
       />
 
       <div className="space-y-2 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
