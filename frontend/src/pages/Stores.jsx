@@ -35,9 +35,8 @@ export function StoresPage() {
   return (
     <Page>
       <PageHeader
-        icon={<StoreIcon size={20} className="text-accent-soft" />}
         title="Lojas monitoradas"
-        subtitle="Cadastre lojas do Mercado Livre, Amazon ou Shopee — o bot varre os produtos de cada loja a cada ciclo, junto com as palavras-chave."
+        description="Cadastre lojas do Mercado Livre, Amazon ou Shopee — o bot varre os produtos de cada loja a cada ciclo, junto com as palavras-chave."
       />
 
       <div className="space-y-2 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
@@ -64,7 +63,7 @@ export function StoresPage() {
             <motion.div key={s.id} layout
               initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }}
               transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
-              className={`flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.06] bg-ink-850 px-4 py-3 ${s.active ? "" : "opacity-50"}`}>
+              className={`flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.06] card-pad px-4 py-3 ${s.active ? "" : "opacity-60"}`}>
               <StoreIcon size={15} className="text-mut" />
               <div className="min-w-0 flex-1">
                 <b className="block truncate text-sm text-white/90">{s.name}</b>

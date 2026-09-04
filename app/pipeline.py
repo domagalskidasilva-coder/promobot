@@ -138,6 +138,11 @@ def upsert_offers(db_, raw_offers: list[OfferRaw]) -> tuple[int, int, int]:
             offer.condition = raw.condition
             db_.add(PriceHistory(product_id=product.id, price=raw.price))
             price_changed += 1
+        # cupom pode aparecer/desaparecer sem mudar o preço
+        if raw.coupon_text and offer.coupon_text != raw.coupon_text:
+            offer.coupon_text = raw.coupon_text
+        elif not raw.coupon_text and offer.coupon_text:
+            offer.coupon_text = None
         offer.updated_at = utcnow()
         updated += 1
 
@@ -254,11 +259,22 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
         stats["alerts"] += await maybe_send_instant_alert(db_)
         stats["alerts"] += await send_watch_alert(db_)
 
+    # caça de cupons embutida: 1 a cada 6 ciclos (páginas de cupom mudam pouco)
+    global _cycle_count
+    _cycle_count += 1
+    if _cycle_count % 6 == 1:
+        try:
+            coupons_stats = await run_coupons_cycle()
+            stats["coupons_new"] = coupons_stats["new"]
+        except Exception:
+            log.exception("Caça de cupons falhou no ciclo")
+
     db.log_event("pipeline", f"Ciclo concluído: {stats}")
     return stats
 
 
 _breakers: dict[str, object] = {}
+_cycle_count = 0
 
 
 def _make_breaker():
@@ -279,3 +295,40 @@ def _active_keywords() -> list[str]:
 def run_cycle_sync(scraper_names: list[str] | None = None) -> dict:
     """Versão síncrona do run_cycle — para rodar em thread separada."""
     return asyncio.run(run_cycle(scraper_names))
+
+
+async def run_coupons_cycle() -> dict:
+    """Varre as páginas de cupons dos marketplaces e grava/atualiza no banco."""
+    from .scrapers.coupons import collect_marketplace
+
+    stats = {"found": 0, "new": 0}
+    from .models import Coupon as CouponModel
+
+    for mp in ("ml", "amazon", "shopee"):
+        try:
+            raw = await collect_marketplace(mp)
+        except Exception as exc:
+            db.log_event("coupons", f"Cupons {mp.upper()} falhou: {exc}", level="warn")
+            continue
+        stats["found"] += len(raw)
+        with db.SessionLocal() as db_:
+            for c in raw:
+                existing = db_.execute(
+                    select(CouponModel).where(
+                        CouponModel.code == c.code, CouponModel.marketplace == mp
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    existing.last_seen_at = utcnow()
+                    existing.description = c.description
+                    continue
+                db_.add(CouponModel(
+                    marketplace=mp, code=c.code, description=c.description,
+                    url=c.url, store=c.store,
+                ))
+                stats["new"] += 1
+            db_.commit()
+
+    if stats["new"]:
+        db.log_event("coupons", f"{stats['new']} cupom(ns) novos ({stats['found']} vistos).")
+    return stats

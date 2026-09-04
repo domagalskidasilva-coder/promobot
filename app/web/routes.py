@@ -19,6 +19,7 @@ from ..config import get_settings
 from ..models import (
     Analysis,
     AppControl,
+    Coupon,
     Store,
     EventLog,
     Offer,
@@ -195,7 +196,8 @@ async def api_offers(marketplace: str | None = None, q: str | None = None,
                 "product": {"id": p.id, "title": p.title, "marketplace": p.marketplace,
                             "url": p.url, "image_url": p.image_url, "category": p.category},
                 "offer": {"price": o.price, "list_price": o.list_price,
-                          "updated_at": o.updated_at.isoformat(), "in_stock": o.in_stock},
+                          "updated_at": o.updated_at.isoformat(), "in_stock": o.in_stock,
+                          "coupon_text": o.coupon_text},
                 "analysis": {"score": a.score, "real_discount_pct": a.real_discount_pct,
                              "vs_avg30_pct": a.vs_avg30_pct, "is_hist_min": a.is_hist_min,
                              "summary": a.summary, "flags": flags},
@@ -236,6 +238,7 @@ async def api_product(product_id: int, period: str = "all"):
             "offer": {"price": offer.price if offer else None,
                       "list_price": offer.list_price if offer else None,
                       "in_stock": offer.in_stock if offer else True,
+                      "coupon_text": offer.coupon_text if offer else None,
                       "updated_at": offer.updated_at.isoformat() if offer else None},
             "analysis": ({"score": analysis.score, "real_discount_pct": analysis.real_discount_pct,
                           "vs_avg30_pct": analysis.vs_avg30_pct, "is_hist_min": analysis.is_hist_min,
@@ -254,6 +257,39 @@ async def api_product(product_id: int, period: str = "all"):
 # --------------------------------------------------------------------------
 # keywords
 # --------------------------------------------------------------------------
+@router.get("/api/coupons")
+async def api_coupons(marketplace: str | None = None, _: bool = Depends(require_login)):
+    with db.SessionLocal() as db_:
+        stmt = (
+            select(Coupon)
+            .where(Coupon.active.is_(True))
+            .order_by(Coupon.last_seen_at.desc())
+            .limit(100)
+        )
+        if marketplace:
+            stmt = stmt.where(Coupon.marketplace == marketplace)
+        # cupons detectados nas ofertas (ex.: "R$ 8 off com cupom" no card do ML)
+        rows = db_.execute(
+            select(Offer, Product)
+            .join(Product, Offer.product_id == Product.id)
+            .where(Offer.coupon_text.is_not(None))
+            .order_by(Offer.updated_at.desc())
+            .limit(100)
+        ).all()
+        if marketplace:
+            rows = [r for r in rows if r[1].marketplace == marketplace]
+        return JSONResponse([
+            {"id": o.id, "marketplace": p.marketplace,
+             "market_label": MARKET_LABEL.get(p.marketplace, p.marketplace),
+             "code": "", "description": o.coupon_text,
+             "url": p.url, "title": p.title[:80],
+             "product_id": p.id, "image_url": p.image_url,
+             "price": o.price,
+             "last_seen": o.updated_at.isoformat()}
+            for o, p in rows
+        ])
+
+
 @router.get("/api/keywords")
 async def api_keywords(_: bool = Depends(require_login)):
     with db.SessionLocal() as db_:

@@ -200,6 +200,13 @@ class MercadoLivreScraper:
             price = parse_brl(current_el.get_text()) if current_el else None
             prev = item.select_one(".andes-money-amount--previous .andes-money-amount__fraction")
             list_price = parse_brl(prev.get_text()) if prev else None
+            # cupom aplicável ao produto (ex.: "R$ 8 off com cupom")
+            card_text = item.get_text(" ", strip=True)
+            coupon_m = re.search(
+                r"([R$]\s?[\d.,]+\s*(?:off|% off)|\d+\s*%\s*off)\s*(?:com|con)\s*cupom",
+                card_text, re.I,
+            )
+            coupon_text = (coupon_m.group(0).strip() if coupon_m else None)
             if not price:
                 continue
             img = item.select_one("img")
@@ -214,6 +221,7 @@ class MercadoLivreScraper:
                     url=url.split("?")[0],
                     price=price,
                     list_price=list_price,
+                    coupon_text=coupon_text,
                     image_url=image_url,
                     category=_classify(title),
                     source={"via": "html", "kw": keyword},

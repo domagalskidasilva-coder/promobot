@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeft, Award, ExternalLink, Eye, Loader2, TrendingDown } from "lucide-react"
+import { ArrowLeft, Award, ExternalLink, Eye, Loader2, Ticket, TrendingDown } from "lucide-react"
 import { api } from "../lib/api"
 import { brl, marketLabel, timeago } from "../lib/format"
 import { DiscountBadge, ErrorState, LoadingState, MarketBadge, Page, PageHeader, ProductImage, ScoreBadge } from "../components/ui"
@@ -140,6 +140,13 @@ export function ProductPage() {
             {o.list_price > o.price ? <s className="text-slate-400">{brl(o.list_price)}</s> : null}
             <DiscountBadge value={a?.real_discount_pct} />
           </p>
+          {o.coupon_text ? (
+            <div className="mt-2 flex items-center gap-2 rounded-xl border border-dashed border-brand-300 bg-brand-50 px-3 py-2">
+              <Ticket className="h-4 w-4 text-brand-700" aria-hidden="true" />
+              <b className="text-sm text-brand-800">{o.coupon_text}</b>
+              <span className="text-[11px] text-slate-500">aplicado no checkout</span>
+            </div>
+          ) : null}
           <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn mt-3 w-full">
             <ExternalLink className="h-4 w-4" aria-hidden="true" /> Abrir oferta na loja
           </a>

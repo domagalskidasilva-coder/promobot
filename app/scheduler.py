@@ -63,6 +63,15 @@ async def watch_collect_requests() -> None:
         await asyncio.sleep(5)
 
 
+async def coupons_job() -> None:
+    """Caça de cupons nas páginas oficiais dos marketplaces (a cada 2h)."""
+    from .pipeline import run_coupons_cycle
+
+    ok = collector.submit(run_coupons_cycle)
+    if not ok:
+        log.info("Coletor ocupado — caça de cupons ignorada.")
+
+
 async def digest_job() -> None:
     try:
         with db.SessionLocal() as db_:
@@ -98,6 +107,14 @@ def configure_jobs(target: AsyncIOScheduler, *, settings: Settings | None = None
         digest_job,
         CronTrigger(hour=settings.digest_hour, minute=5),
         id="digest",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+    target.add_job(
+        coupons_job,
+        IntervalTrigger(hours=2, jitter=120),
+        id="coupons",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

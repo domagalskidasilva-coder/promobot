@@ -25,6 +25,7 @@ import { StatusPage } from "./pages/Status"
 import { LoginPage } from "./pages/Login"
 import { InsightsPage } from "./pages/Insights"
 import { StoresPage } from "./pages/Stores"
+import { CouponsPage } from "./pages/Coupons"
 
 const NAV = [
   { to: "/", label: "Ofertas", icon: Flame, end: true },

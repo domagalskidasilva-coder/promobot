@@ -175,3 +175,22 @@ class Store(Base):
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Coupon(Base):
+    """Cupom de desconto coletado dos marketplaces (páginas de cupons ou ofertas)."""
+
+    __tablename__ = "coupons"
+    __table_args__ = (UniqueConstraint("code", "marketplace", name="uq_coupon_code_mp"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    marketplace: Mapped[str] = mapped_column(String(20))
+    code: Mapped[str] = mapped_column(String(64))  # "" = cupom aplicado automaticamente no link
+    description: Mapped[str] = mapped_column(Text)  # ex.: "R$100 OFF em eletrônicos acima de R$1000"
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)  # link da promo/cupom
+    store: Mapped[str | None] = mapped_column(String(160), nullable=True)  # ex.: Samsung, Xbox
+    min_purchase: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
