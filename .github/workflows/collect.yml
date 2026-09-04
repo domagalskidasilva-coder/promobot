@@ -24,6 +24,7 @@ jobs:
       - name: Instalar dependências
         run: |
           pip install -r requirements.txt
+          pip install playwright==1.49.0
           python -m playwright install chromium --with-deps
 
       - name: Coletar e processar
