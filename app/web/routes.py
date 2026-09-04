@@ -411,11 +411,26 @@ async def buscar_agora(request: Request, _: bool = Depends(require_login)):
 
     global _cycle_running
     if IS_SERVERLESS:
+        s = get_settings()
+        if s.github_token and s.github_repo:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    f"https://api.github.com/repos/{s.github_repo}/actions/workflows/collect.yml/dispatches",
+                    headers={"Authorization": f"Bearer {s.github_token}",
+                             "Accept": "application/vnd.github+json"},
+                    json={"ref": "main"},
+                )
+                if r.status_code >= 300:
+                    raise HTTPException(status_code=502, detail=f"GitHub: {r.status_code}")
+            return JSONResponse({"ok": True, "via": "github"})
+        # fallback legado: grava flag no banco (coletor local consome)
         with db.SessionLocal() as db_:
             current = _get_control(db_, "collect_request") or ""
             if current == "" or current.startswith("running:"):
                 _set_control(db_, "collect_request", f"requested:{utcnow().isoformat()}")
-        return JSONResponse({"ok": True})
+        return JSONResponse({"ok": True, "via": "flag"})
 
     collector.submit(pipeline.run_cycle)
     return JSONResponse({"ok": True})

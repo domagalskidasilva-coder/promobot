@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # --- Palavras-chave iniciais (só na primeira execução) -----------------
     keywords: str = "ps5,rtx 4060,steam deck,notebook gamer"
 
+    # --- GitHub Actions (dispara coleta pelo botão do painel na Vercel) ----
+    github_token: str = ""  # PAT com escopo repo + workflow
+    github_repo: str = ""   # ex.: "usuario/promobot"
+
     # --- Diversos ----------------------------------------------------------
     disable_scheduler: bool = False  # true em testes/dev
     # Chrome real do usuário via CDP (fallback anti-bloqueio). Ex.:
