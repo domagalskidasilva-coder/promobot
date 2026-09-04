@@ -6,6 +6,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data   # banco SQLite + perfis do navegador persistem
+      - ./.env:/app/.env:ro  # afiliados etc. editáveis pelo painel
     restart: unless-stopped
     init: true             # repassa sinais e recolhe processos filhos do navegador
     stop_grace_period: 45s
