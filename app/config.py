@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,10 +43,10 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     email_from: str = ""  # ex.: "Promobot <voce@gmail.com>"
     email_to: str = ""  # destino dos alertas
-    digest_hour: int = 8  # hora do resumo diário
+    digest_hour: int = Field(default=8, ge=0, le=23)  # hora do resumo diário
 
     # --- Coleta -----------------------------------------------------------
-    crawl_interval_minutes: int = 30
+    crawl_interval_minutes: int = Field(default=30, ge=1)
     min_delay_s: float = 2.0  # pausa mínima entre requisições ao mesmo site
     max_delay_s: float = 5.0
     results_per_keyword: int = 40
@@ -65,7 +66,8 @@ class Settings(BaseSettings):
     github_repo: str = ""   # ex.: "usuario/promobot"
 
     # --- Diversos ----------------------------------------------------------
-    disable_scheduler: bool = False  # true em testes/dev
+    # false no processo coletor (VPS/Docker); true em testes e no painel Vercel.
+    disable_scheduler: bool = False
     # Chrome real do usuário via CDP (fallback anti-bloqueio). Ex.:
     #   PROMOBOT_CDP_URL=http://127.0.0.1:9333
     # Inicie o Chrome com: --remote-debugging-port=9333

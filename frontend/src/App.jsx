@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Flame, Eye, Tag, ChartNoAxesColumn, RefreshCw, Loader2, Zap, ShieldCheck, Clock3, Search, Sparkles, ExternalLink, CheckCircle2 } from "lucide-react"
+import { Link, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
+import {
+  ChartNoAxesColumn,
+  Eye,
+  Flame,
+  Loader2,
+  LogOut,
+  Menu,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Tag,
+  X,
+  Zap,
+} from "lucide-react"
 import { api } from "./lib/api"
-import { Routes, Route, Link, NavLink, useLocation, useNavigate } from "react-router-dom"
+import { timeago } from "./lib/format"
 import { FeedPage } from "./pages/Feed"
 import { ProductPage } from "./pages/Product"
 import { WatchlistPage } from "./pages/Watchlist"
@@ -11,34 +24,18 @@ import { StatusPage } from "./pages/Status"
 import { LoginPage } from "./pages/Login"
 import { InsightsPage } from "./pages/Insights"
 
-function timeago(iso) {
-  if (!iso) return "—"
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (mins < 1) return "agora"
-  if (mins < 60) return `há ${mins} min`
-  const h = Math.floor(mins / 60)
-  if (h < 24) return `há ${h} h`
-  return `há ${Math.floor(h / 24)} d`
-}
+const NAV = [
+  { to: "/", label: "Ofertas", icon: Flame, end: true },
+  { to: "/watchlist", label: "Monitoradas", icon: Eye, end: false },
+  { to: "/keywords", label: "Palavras-chave", icon: Tag, end: false },
+  { to: "/insights", label: "Insights", icon: Sparkles, end: false },
+  { to: "/status", label: "Status", icon: ChartNoAxesColumn, end: false },
+]
 
-/* ------------------------------------------------------------------ */
-/* Poller GLOBAL do estado da coleta na nuvem (todas as páginas)       */
-/* ------------------------------------------------------------------ */
 function useCollector() {
-  const [cloud, setCloud] = useState(null)       // null | "fila" | "rodando" | "concluido"
+  const [cloud, setCloud] = useState(null)
   const [runUrl, setRunUrl] = useState(null)
   const collecting = cloud === "fila" || cloud === "rodando"
-  const pathRef = useRef("/")
-  pathRef.current = location.pathname
-
-  const refreshIfHome = useCallback(() => {
-    if (pathRef.current === "/") navigateSafe()
-  }, [])
-
-  function navigateSafe() {
-    // recarrega para puxar os dados frescos sem mudar de página
-    window.dispatchEvent(new CustomEvent("promobot:refresh"))
-  }
 
   const poll = useCallback(async () => {
     try {
@@ -48,12 +45,14 @@ function useCollector() {
         setCloud(st.state === "queued" || st.state === "waiting" || st.state === "pending" ? "fila" : "rodando")
       } else if (st.state === "concluido_recente") {
         setCloud("concluido")
-        setTimeout(() => setCloud(null), 12000)
-        navigateSafe()
+        window.setTimeout(() => setCloud(null), 12000)
+        window.dispatchEvent(new CustomEvent("promobot:refresh"))
       } else {
         setCloud((prev) => (prev === "concluido" ? prev : null))
       }
-    } catch { /* silencioso */ }
+    } catch {
+      /* coleta indisponível: mantém estado anterior */
+    }
   }, [])
 
   useEffect(() => {
@@ -68,190 +67,317 @@ function useCollector() {
     try {
       const r = await api.collectNow()
       if (r?.already) setCloud("fila")
-    } catch { /* segue no polling */ }
+    } catch {
+      /* o polling corrige o estado */
+    }
     poll()
   }, [collecting, poll])
 
-  return { cloud, collecting, runUrl, trigger, poll }
+  return { cloud, collecting, runUrl, trigger }
 }
 
-/* ------------------------------------------------------------------ */
-/* Sidebar                                                             */
-/* ------------------------------------------------------------------ */
-function Sidebar({ collecting, cloud, onCollect }) {
+function CollectorStatus({ collecting, cloud }) {
+  if (collecting) {
+    return (
+      <span className="badge badge-warn" role="status">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        {cloud === "fila" ? "Coleta na fila" : "Coletando"}
+      </span>
+    )
+  }
+  if (cloud === "concluido") {
+    return (
+      <span className="badge badge-good" role="status">
+        Coleta concluída
+      </span>
+    )
+  }
+  return (
+    <span className="badge badge-neutral" role="status">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" aria-hidden="true" />
+      Coletor pronto
+    </span>
+  )
+}
+
+function SidebarNav({ onNavigate }) {
+  return (
+    <nav aria-label="Navegação principal" className="space-y-1">
+      {NAV.map(({ to, label, icon: Icon, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              isActive
+                ? "bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span>{label}</span>
+              {isActive ? <span className="sr-only">(página atual)</span> : null}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
+
+function Shell({ onLogout, collector }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [query, setQuery] = useState("")
   const navigate = useNavigate()
+  const location = useLocation()
+  const closeRef = useRef(null)
 
-  const links = [
-    { to: "/", label: "Ofertas", icon: Flame },
-    { to: "/watchlist", label: "Watchlist", icon: Eye },
-    { to: "/keywords", label: "Palavras-chave", icon: Tag },
-    { to: "/insights", label: "Insights", icon: Sparkles },
-    { to: "/status", label: "Status", icon: ChartNoAxesColumn },
-  ]
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (menuOpen) closeRef.current?.focus()
+  }, [menuOpen])
+
+  const submitSearch = (e) => {
+    e.preventDefault()
+    const params = new URLSearchParams()
+    if (query.trim()) params.set("q", query.trim())
+    navigate(`/?${params.toString()}`)
+    setMenuOpen(false)
+  }
+
+  const { collecting, cloud, trigger } = collector
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-white/[0.06] bg-ink-950/70 backdrop-blur-2xl">
-      <Link to="/" className="flex items-center gap-3 px-6 pt-7 pb-6">
-        <motion.div
-          animate={{ scale: [1, 1.08, 1] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-accent to-accent-soft shadow-xl shadow-accent/30"
-        >
-          <Flame size={20} className="text-white" />
-        </motion.div>
-        <div>
-          <div className="text-[17px] font-black leading-none tracking-tight">
-            <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">Promobot</span>
-          </div>
-          <div className="mt-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-mut/70">deals radar</div>
-        </div>
-      </Link>
+    <div className="min-h-screen">
+      <a href="#conteudo" className="skip-link">
+        Pular para o conteúdo
+      </a>
 
-      <nav className="mt-2 flex-1 space-y-1 px-3">
-        {links.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === "/"}
-            className={({ isActive }) =>
-              `group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[14px] font-medium transition
-               ${isActive ? "text-white" : "text-mut hover:bg-white/[0.04] hover:text-white"}`}>
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <motion.span layoutId="side-active"
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-accent/15 to-transparent ring-1 ring-accent/25"
-                    transition={{ type: "spring", stiffness: 350, damping: 30 }} />
-                )}
-                <Icon size={17} className={`relative z-10 ${isActive ? "text-accent-soft" : ""}`} />
-                <span className="relative z-10">{label}</span>
-                {isActive && <span className="relative z-10 ml-auto h-1.5 w-1.5 rounded-full bg-accent-soft" />}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      <div className="px-4 pb-3">
-        <div className="relative">
-          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut" />
-          <input
-            className="field py-1.5 pl-8 text-[12.5px]"
-            placeholder="buscar no catálogo…"
-            defaultValue=""
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                navigate("/?q=" + encodeURIComponent(e.currentTarget.value.trim()))
-              }
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="px-4 pb-5">
-        <motion.button whileHover={{ scale: collecting ? 1 : 1.02 }} whileTap={{ scale: collecting ? 1 : 0.97 }}
-          onClick={onCollect} disabled={collecting}
-          className="btn w-full">
-          {collecting ? (
-            <><Loader2 size={15} className="animate-spin" /> {cloud === "fila" ? "Na fila na nuvem…" : "Coletando…"}</>
-          ) : (
-            <><Zap size={15} /> Buscar agora</>
-          )}
-        </motion.button>
-        <div className="mt-3 space-y-1.5 px-1 text-[11px] text-mut/80">
-          <div className="flex items-center gap-2">
-            <span className={`relative flex h-2 w-2 ${collecting ? "" : ""}`}>
-              <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 ${collecting ? "animate-ping bg-warn" : "animate-ping bg-good"}`} />
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${collecting ? "bg-warn" : "bg-good"}`} />
+      {/* Sidebar desktop */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-200 bg-white lg:flex">
+        <Link to="/" className="flex items-center gap-2.5 px-5 pb-5 pt-6" aria-label="Promobot — início">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-blue-700 text-white">
+            <Flame className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block text-[17px] font-bold leading-none tracking-tight text-slate-900">Promobot</span>
+            <span className="mt-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Inteligência de preços
             </span>
-            {collecting ? "coletando na nuvem" : "coletor pronto"}
+          </span>
+        </Link>
+        <div className="flex-1 space-y-4 overflow-y-auto px-3">
+          <SidebarNav />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-700">Coleta de ofertas</p>
+            <p className="mt-0.5 text-xs leading-snug text-slate-500">Ciclo automático a cada 30 min nos 3 marketplaces.</p>
+            <button type="button" onClick={trigger} disabled={collecting} className="btn mt-2.5 w-full btn-sm">
+              {collecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  {cloud === "fila" ? "Na fila…" : "Coletando…"}
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4" aria-hidden="true" />
+                  Buscar agora
+                </>
+              )}
+            </button>
           </div>
-          <div className="flex items-center gap-2"><ShieldCheck size={12} /> Chrome real (anti-bloqueio)</div>
-          <div className="flex items-center gap-2"><Clock3 size={12} /> ciclo a cada 30 min</div>
         </div>
-      </div>
-    </aside>
-  )
-}
+        <div className="border-t border-slate-200 p-3">
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            Sair
+          </button>
+        </div>
+      </aside>
 
-/* ------------------------------------------------------------------ */
-/* Banner global de coleta (todas as páginas)                          */
-/* ------------------------------------------------------------------ */
-function CollectingBanner({ collecting, cloud, runUrl }) {
-  return (
-    <AnimatePresence>
-      {collecting && (
-        <motion.div
-          initial={{ opacity: 0, y: -18 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -18 }}
-          className="fixed right-6 top-[68px] z-[60] flex items-center gap-3 rounded-2xl border border-warn/30 bg-ink-900/95 px-4 py-3 shadow-2xl backdrop-blur-xl"
-        >
-          <Loader2 size={17} className="animate-spin text-warn" />
-          <div>
-            <div className="text-[13px] font-bold text-white">
-              {cloud === "fila" ? "Coleta na fila na nuvem…" : "Coletando ofertas nos marketplaces…"}
+      {/* Drawer mobile */}
+      {menuOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu de navegação">
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setMenuOpen(false)}
+            className="absolute inset-0 bg-slate-900/40"
+            tabIndex={-1}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
+            <div className="flex items-center justify-between px-4 py-4">
+              <span className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-700 text-white">
+                  <Flame className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="text-base font-bold text-slate-900">Promobot</span>
+              </span>
+              <button
+                ref={closeRef}
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+                aria-label="Fechar menu"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
             </div>
-            <div className="text-[11px] text-mut">O painel atualiza sozinho quando terminar</div>
+            <div className="flex-1 space-y-3 overflow-y-auto px-3 pb-4">
+              <SidebarNav onNavigate={() => setMenuOpen(false)} />
+              <button type="button" onClick={trigger} disabled={collecting} className="btn w-full">
+                {collecting ? "Coletando…" : "Buscar agora"}
+              </button>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Sair
+              </button>
+            </div>
           </div>
-          {runUrl && (
-            <a href={runUrl} target="_blank" rel="noopener" className="ml-2 inline-flex items-center gap-1 text-[11px] font-semibold text-accent-soft hover:underline">
-              ver run <ExternalLink size={11} />
-            </a>
-          )}
-        </motion.div>
-      )}
-      {cloud === "concluido" && (
-        <motion.div
-          initial={{ opacity: 0, y: -18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-          className="fixed right-6 top-[68px] z-[60] flex items-center gap-3 rounded-2xl border border-good/40 bg-ink-900/95 px-4 py-3 shadow-2xl backdrop-blur-xl"
-        >
-          <CheckCircle2 size={17} className="text-good" />
-          <div className="text-[13px] font-bold text-white">Coleta concluída — ofertas novas no feed</div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      ) : null}
+
+      <div className="lg:pl-60">
+        {/* Topbar contextual */}
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5 sm:px-6">
+            <button
+              type="button"
+              className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Abrir menu de navegação"
+              aria-expanded={menuOpen}
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <form onSubmit={submitSearch} role="search" aria-label="Buscar no catálogo" className="min-w-0 flex-1 sm:max-w-sm">
+              <label htmlFor="topbar-search" className="sr-only">
+                Buscar produto
+              </label>
+              <span className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                <input
+                  id="topbar-search"
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar produto…"
+                  className="field pl-9"
+                  autoComplete="off"
+                />
+              </span>
+            </form>
+            <div className="ml-auto flex items-center gap-2">
+              <CollectorStatus collecting={collecting} cloud={cloud} />
+              <button
+                type="button"
+                onClick={trigger}
+                disabled={collecting}
+                className="btn-secondary btn-sm hidden sm:inline-flex"
+                title="Iniciar coleta agora"
+              >
+                {collecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                )}
+                Atualizar
+              </button>
+            </div>
+          </div>
+          {collecting || cloud === "concluido" ? (
+            <div
+              role="status"
+              className={`border-t px-4 py-1.5 text-center text-xs font-medium sm:px-6 ${
+                cloud === "concluido" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {cloud === "concluido"
+                ? "Coleta concluída. Os dados foram atualizados."
+                : cloud === "fila"
+                  ? "Coleta na fila. O painel será atualizado automaticamente."
+                  : "Coletando ofertas nos marketplaces. O painel será atualizado automaticamente."}
+            </div>
+          ) : null}
+        </header>
+
+        <main id="conteudo" tabIndex={-1} className="mx-auto w-full max-w-6xl px-4 py-5 outline-none sm:px-6 sm:py-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* App                                                                 */
-/* ------------------------------------------------------------------ */
 export default function App() {
   const [auth, setAuth] = useState(null)
-  const location = useLocation()
-  const { cloud, collecting, runUrl, trigger } = useCollector()
+  const collector = useCollector()
 
-  // refresh sob demanda (evento disparado quando a coleta termina)
   useEffect(() => {
     const h = () => window.location.reload()
     window.addEventListener("promobot:refresh", h)
     return () => window.removeEventListener("promobot:refresh", h)
   }, [])
 
-  useEffect(() => { api.me().then((d) => setAuth(d.logged !== false)).catch(() => setAuth(false)) }, [])
+  useEffect(() => {
+    api
+      .me()
+      .then((d) => setAuth(d.logged !== false))
+      .catch(() => setAuth(false))
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await api.logout()
+    } catch {
+      /* mesmo sem resposta, encerra a sessão local */
+    }
+    setAuth(false)
+    window.location.href = "/login"
+  }, [])
 
   if (auth === null) {
-    return <div className="grid min-h-screen place-items-center"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-100" role="status" aria-label="Carregando">
+        <span className="flex items-center gap-2 text-sm text-slate-600">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-700" aria-hidden="true" />
+          Carregando painel…
+        </span>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen">
-      {auth && <Sidebar collecting={collecting} cloud={cloud} onCollect={trigger} />}
-      {auth && <CollectingBanner collecting={collecting} cloud={cloud} runUrl={runUrl} />}
-      <div className={auth ? "pl-[248px]" : ""}>
-        <main className="mx-auto max-w-[1500px] px-8 py-7">
-          <AnimatePresence mode="wait">
-            <Routes location={location} key={location.pathname.split("/")[1]}>
-              <Route path="/login" element={<LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/" element={auth ? <FeedPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/produto/:id" element={auth ? <ProductPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/watchlist" element={auth ? <WatchlistPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/keywords" element={auth ? <KeywordsPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/insights" element={auth ? <InsightsPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/status" element={auth ? <StatusPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-            </Routes>
-          </AnimatePresence>
-        </main>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage onOk={() => setAuth(true)} standalone={!auth} />} />
+      {auth ? (
+        <Route element={<Shell onLogout={logout} collector={collector} />}>
+          <Route index element={<FeedPage />} />
+          <Route path="produto/:id" element={<ProductPage />} />
+          <Route path="watchlist" element={<WatchlistPage />} />
+          <Route path="keywords" element={<KeywordsPage />} />
+          <Route path="insights" element={<InsightsPage />} />
+          <Route path="status" element={<StatusPage />} />
+        </Route>
+      ) : (
+        <Route path="*" element={<LoginPage onOk={() => setAuth(true)} standalone />} />
+      )}
+    </Routes>
   )
 }
 

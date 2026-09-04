@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -14,7 +14,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import db
 from .config import get_settings
 from .collector import collector
-from .scheduler import setup as setup_scheduler, shutdown as shutdown_scheduler, watch_collect_requests
+from .scheduler import (
+    scheduler,
+    setup as setup_scheduler,
+    shutdown as shutdown_scheduler,
+    watch_collect_requests,
+)
 from .web.routes import router
 
 logging.basicConfig(
@@ -31,6 +36,7 @@ IS_SERVERLESS = get_settings().disable_scheduler
 async def lifespan(app: FastAPI):
     settings = get_settings()
     db.init_db()
+    collect_request_watcher: asyncio.Task[None] | None = None
     if not settings.disable_scheduler:
         # limpa flag de coleta pendente de um processo anterior (estado órfão)
         from .models import AppControl
@@ -42,15 +48,37 @@ async def lifespan(app: FastAPI):
                 db_.commit()
         collector.start()
         setup_scheduler()
-        asyncio.create_task(watch_collect_requests())
+        collect_request_watcher = asyncio.create_task(
+            watch_collect_requests(), name="promobot-collect-request-watcher"
+        )
+        log = logging.getLogger("promobot.main")
+        log.info("Coletor e scheduler habilitados neste processo.")
+    else:
+        logging.getLogger("promobot.main").info(
+            "Scheduler desabilitado por PROMOBOT_DISABLE_SCHEDULER."
+        )
     yield
     if not settings.disable_scheduler:
+        if collect_request_watcher:
+            collect_request_watcher.cancel()
+            with suppress(asyncio.CancelledError):
+                await collect_request_watcher
         await shutdown_scheduler()
 
 
 app = FastAPI(title="Promobot", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=get_settings().session_secret, same_site="lax")
 app.include_router(router)
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Sinal simples para o healthcheck do container, sem autenticação."""
+    settings = get_settings()
+    scheduler_state = "disabled" if settings.disable_scheduler else (
+        "running" if scheduler.running else "starting"
+    )
+    return {"status": "ok", "scheduler": scheduler_state}
 
 BASE_DIR = Path(__file__).resolve().parent
 

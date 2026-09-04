@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -17,7 +17,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from . import db, pipeline
 from .collector import collector
-from .config import get_settings
+from .config import Settings, get_settings
 from .models import utcnow
 from .notify.email import send_daily_digest
 from .scrapers.browser import manager
@@ -72,50 +72,52 @@ async def digest_job() -> None:
         log.exception("Digest diário falhou")
 
 
-def setup(start_now: bool = True) -> None:
-    settings = get_settings()
-    scheduler.add_job(
+def configure_jobs(target: AsyncIOScheduler, *, settings: Settings | None = None) -> None:
+    """Registra os jobs no scheduler informado sem iniciá-lo.
+
+    Separar o registro da inicialização permite validar o agendamento sem
+    iniciar coleta e impede que uma reinicialização do lifespan duplique jobs.
+    """
+    settings = settings or get_settings()
+
+    # ``next_run_time=None`` pausa permanentemente um job do APScheduler. O
+    # projeto pretendia iniciar o primeiro ciclo após o boot, mas a coroutine
+    # que fazia isso não era criada pelo lifespan. Um horário real mantém esse
+    # primeiro ciclo e deixa o IntervalTrigger calcular todos os seguintes.
+    first_crawl_at = datetime.now(target.timezone) + timedelta(seconds=10)
+    target.add_job(
         crawl_job,
         IntervalTrigger(minutes=settings.crawl_interval_minutes, jitter=120),
         id="crawl",
         max_instances=1,
         coalesce=True,
-        next_run_time=None,  # primeiro ciclo disparado manualmente pelo startup
+        next_run_time=first_crawl_at,
+        replace_existing=True,
     )
-    scheduler.add_job(
+    target.add_job(
         digest_job,
         CronTrigger(hour=settings.digest_hour, minute=5),
         id="digest",
         max_instances=1,
         coalesce=True,
+        replace_existing=True,
     )
+
+
+def setup(start_now: bool = True) -> None:
+    if scheduler.running:
+        log.warning("Scheduler já está em execução; setup duplicado ignorado.")
+        return
+
+    settings = get_settings()
+    configure_jobs(scheduler, settings=settings)
     if start_now:
         scheduler.start()
         log.info(
-            "Scheduler iniciado: coleta a cada %d min, digest às %d:05",
+            "Scheduler iniciado: primeira coleta em ~10 s, depois a cada %d min; digest às %d:05",
             settings.crawl_interval_minutes,
             settings.digest_hour,
         )
-
-
-async def run_first_cycle() -> None:
-    """Dispara o primeiro ciclo ~10s após o boot (dá tempo do painel subir)."""
-    await asyncio.sleep(10)
-    await crawl_job()
-
-
-async def _watch_flag_release() -> None:
-    """Libera o flag 'running:' quando o coletor termina (pooling leve)."""
-    while True:
-        try:
-            with db.SessionLocal() as db_:
-                row = db_.get(AppControl, "collect_request")
-                if row and row.value and row.value.startswith("running:") and not collector.running:
-                    row.value = ""
-                    db_.commit()
-        except Exception:
-            pass
-        await asyncio.sleep(5)
 
 
 async def shutdown() -> None:

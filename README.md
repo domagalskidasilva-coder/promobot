@@ -29,7 +29,9 @@ cp .env.example .env                 # edite: Gemini key, SMTP, palavras-chave
 uvicorn app.main:app --reload
 ```
 
-Abra **http://localhost:8000** — o primeiro ciclo de coleta começa ~10 s depois.
+Abra **http://localhost:8000** — com `PROMOBOT_DISABLE_SCHEDULER=false`, o
+primeiro ciclo de coleta começa ~10 s depois e os seguintes respeitam o intervalo
+configurado.
 
 ## O que você precisa fornecer
 
@@ -116,6 +118,29 @@ cd ~/promobot && docker compose up -d --build
 
 O painel fica em `http://IP-DA-VPS:8000` — **configure `PROMOBOT_AUTH_USER/PASS`**
 antes de expor. Banco e perfis de navegador persistem em `./data`.
+
+Antes de subir, no `.env` exclusivo da VPS, configure ao menos:
+
+```dotenv
+PROMOBOT_DISABLE_SCHEDULER=false
+PROMOBOT_SESSION_SECRET=uma-chave-aleatoria-longa
+PROMOBOT_AUTH_USER=um-usuario
+PROMOBOT_AUTH_PASS=uma-senha-forte
+```
+
+O compose já usa `restart: unless-stopped`, healthcheck em `/healthz`, processo
+inicializador para o navegador e um único worker Uvicorn (o scheduler é local ao
+processo). Para o reinício sobreviver a reboot da VPS, habilite o Docker uma vez:
+
+```bash
+sudo systemctl enable --now docker
+```
+
+Depois valide, sem iniciar uma coleta manual: `docker compose ps` deve mostrar
+`healthy`; `docker compose logs -f promobot` deve registrar o scheduler habilitado
+e a primeira coleta prevista em aproximadamente 10 segundos. Não configure
+`PROMOBOT_DISABLE_SCHEDULER=true` nesse container: esse valor é reservado ao
+painel serverless e aos testes.
 
 ## Painel na Vercel + coletor na sua máquina (arquitetura atual)
 

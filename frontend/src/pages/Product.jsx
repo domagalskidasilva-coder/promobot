@@ -1,161 +1,275 @@
-import { useEffect, useState } from "react"
-import { useParams, Link } from "react-router-dom"
-import { motion } from "framer-motion"
-import Chart from "react-apexcharts"
-import { ArrowLeft, ExternalLink, Eye, Bot, Award, TrendingDown, Loader2 } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useParams } from "react-router-dom"
+import { ArrowLeft, Award, ExternalLink, Eye, Loader2, TrendingDown } from "lucide-react"
 import { api } from "../lib/api"
-import { FadeIn, SpotlightCard, ScorePill } from "../components/fx"
-import { timeago } from "../App"
+import { brl, marketLabel, timeago } from "../lib/format"
+import { DiscountBadge, ErrorState, LoadingState, MarketBadge, Page, PageHeader, ProductImage, ScoreBadge } from "../components/ui"
+import { PriceHistoryChart } from "../components/charts"
 
 const PERIODS = [
-  { id: "7", label: "7 dias" },
-  { id: "30", label: "30 dias" },
-  { id: "90", label: "90 dias" },
-  { id: "all", label: "tudo" },
+  { id: "7", label: "7 dias", days: 7 },
+  { id: "30", label: "30 dias", days: 30 },
+  { id: "90", label: "90 dias", days: 90 },
+  { id: "all", label: "Todo o período", days: null },
 ]
+
+async function fetchProduct(id, period) {
+  // api.js preservado; o backend aceita ?period= — usamos fetch direto com o mesmo contrato.
+  const res = await fetch(`/api/product/${id}?period=${encodeURIComponent(period)}`, { credentials: "same-origin" })
+  if (res.status === 303 || res.status === 401 || res.status === 403) throw new Error("unauthorized")
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+function EvidenceRow({ label, value, hint }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-0">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-semibold tabular-nums text-slate-900" title={hint || undefined}>
+        {value}
+      </dd>
+    </div>
+  )
+}
 
 export function ProductPage() {
   const { id } = useParams()
   const [data, setData] = useState(null)
+  const [failed, setFailed] = useState(false)
   const [period, setPeriod] = useState("all")
   const [target, setTarget] = useState("")
+  const [watchMsg, setWatchMsg] = useState(null)
+  const [watchBusy, setWatchBusy] = useState(false)
 
-  const load = () => api.product(id, period).then((d) => { setData(d); setTarget(d.watched?.target_price ?? "") }).catch(() => {})
-  useEffect(() => { setData(null); load() }, [id, period])
+  const load = async () => {
+    setFailed(false)
+    try {
+      const d = await fetchProduct(id, period)
+      setData(d)
+      setTarget(d.watched?.target_price ?? "")
+    } catch {
+      setFailed(true)
+    }
+  }
 
-  if (!data) return <div className="grid place-items-center py-24"><Loader2 className="h-8 w-8 animate-spin text-accent" /></div>
-  const { product: p, offer: o, analysis: a, history, stats, watched } = data
-  const points = history.map((h) => ({ x: new Date(h.t).getTime(), y: h.p }))
+  useEffect(() => {
+    setData(null)
+    setWatchMsg(null)
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, period])
 
-  const watch = async () => { await api.addWatch(p.id, target === "" ? null : parseFloat(target)); load() }
+  const historyPoints = useMemo(() => {
+    if (!data?.history) return []
+    return data.history.map((h) => ({ x: new Date(h.t).getTime(), y: h.p })).filter((p) => !Number.isNaN(p.x))
+  }, [data])
+
+  if (failed) {
+    return (
+      <Page>
+        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar às ofertas
+        </Link>
+        <ErrorState
+          title="Produto não encontrado ou indisponível"
+          description="O produto pode ter sido removido do catálogo ou a conexão falhou."
+          onRetry={load}
+        />
+      </Page>
+    )
+  }
+
+  if (!data) return <LoadingState label="Carregando produto…" />
+
+  const { product: p, offer: o, analysis: a, stats, watched } = data
+
+  const watch = async (e) => {
+    e.preventDefault()
+    setWatchBusy(true)
+    setWatchMsg(null)
+    try {
+      const parsed = target === "" ? null : Number(String(target).replace(",", "."))
+      if (target !== "" && !(parsed > 0)) {
+        setWatchMsg({ tone: "error", text: "Informe um preço-alvo válido maior que zero." })
+        return
+      }
+      await api.addWatch(p.id, parsed)
+      setWatchMsg({ tone: "ok", text: watched ? "Preço-alvo atualizado." : "Produto adicionado à lista de monitoradas." })
+      load()
+    } catch {
+      setWatchMsg({ tone: "error", text: "Não foi possível salvar. Tente novamente." })
+    } finally {
+      setWatchBusy(false)
+    }
+  }
+
+  const verdict =
+    a?.score >= 80
+      ? "Preço muito bom pelo histórico. Vale considerar a compra."
+      : a?.score >= 60
+        ? "Preço bom, mas confira o histórico antes de decidir."
+        : a?.score != null
+          ? "Preço comum para este produto. Aguarde uma queda maior, se possível."
+          : "Ainda sem avaliação automática para este produto."
 
   return (
-    <div className="space-y-5">
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-mut transition hover:text-white">
-        <ArrowLeft size={15} /> voltar às ofertas
+    <Page labelledBy="page-title">
+      <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar às ofertas
       </Link>
 
-      <FadeIn>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="max-w-3xl text-xl font-bold leading-snug">{p.title}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <span className={`market mkt-${p.marketplace}`}>{data.market_label}</span>
-              <span className={`badge ${o.in_stock ? "badge-ok" : "badge-warn"}`}>{o.in_stock ? "em estoque" : "sem estoque"}</span>
-              {p.category && <span className="badge">{p.category === "games" ? "jogos" : "eletrônicos"}</span>}
-            </div>
-          </div>
-          {a?.score != null && <ScorePill score={a.score} />}
-        </div>
-      </FadeIn>
+      <PageHeader
+        title={p.title}
+        description={`${marketLabel(p.marketplace, data.market_label)} · atualizado ${timeago(o.updated_at)}`}
+        meta={
+          <>
+            <MarketBadge code={p.marketplace} label={data.market_label} />
+            <span className={`badge ${o.in_stock ? "badge-good" : "badge-warn"}`}>{o.in_stock ? "Em estoque" : "Sem estoque"}</span>
+            {p.category ? <span className="badge badge-neutral">{p.category === "games" ? "Jogos" : "Eletrônicos"}</span> : null}
+            <ScoreBadge score={a?.score} />
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-start gap-6">
-        <FadeIn delay={0.05} className="w-full shrink-0 sm:w-[290px]">
-          {p.image_url
-            ? <img src={p.image_url} alt="" className="w-full rounded-2xl bg-white object-contain" />
-            : <div className="grid h-56 w-full place-items-center rounded-2xl bg-ink-900 text-mut">sem imagem</div>}
-        </FadeIn>
-
-        <FadeIn delay={0.1} className="min-w-[240px] flex-1">
-          <div className="text-4xl font-extrabold">R$ {Number(o.price).toFixed(2)}</div>
-          {o.list_price > o.price && (
-            <p className="mt-1 flex items-baseline gap-2">
-              <s className="text-sm text-mut">R$ {Number(o.list_price).toFixed(2)}</s>
-              {a?.real_discount_pct > 0 && <b className="text-good">−{Math.round(a.real_discount_pct)}%</b>}
-            </p>
-          )}
-          <a href={p.url} target="_blank" rel="noopener" className="btn mt-3">
-            <ExternalLink size={14} /> Ver oferta no site
+      {/* Resumo de decisão: preço + ação + evidência */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <section aria-label="Resumo da oferta" className="card-pad lg:col-span-1">
+          <ProductImage src={p.image_url} alt={`Imagem de ${p.title}`} className="h-52 w-full rounded-lg border border-slate-100" />
+          <p className="mt-4 text-3xl font-bold tracking-tight tabular-nums text-slate-900">{brl(o.price)}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+            {o.list_price > o.price ? <s className="text-slate-400">{brl(o.list_price)}</s> : null}
+            <DiscountBadge value={a?.real_discount_pct} />
+          </p>
+          <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn mt-3 w-full">
+            <ExternalLink className="h-4 w-4" aria-hidden="true" /> Abrir oferta na loja
           </a>
+          <p className="hint">A compra é concluída no site da loja. O Promobot não vende produtos.</p>
+        </section>
 
-          {stats && stats.n_points > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[["mínimo", stats.min], ["média", stats.avg], ["máximo", stats.max]].map(([label, v]) => (
-                <div key={label} className="rounded-xl border border-ink-700 bg-ink-850 px-3 py-2">
-                  <b className="block text-sm">R$ {Number(v).toFixed(2)}</b>
-                  <span className="text-[11px] text-mut">{label} no período</span>
-                </div>
-              ))}
-              <div className="rounded-xl border border-ink-700 bg-ink-850 px-3 py-2">
-                <b className="block text-sm">{stats.n_points}</b>
-                <span className="text-[11px] text-mut">leituras</span>
-              </div>
-            </div>
+        <section aria-label="Evidência do histórico" className="card-pad lg:col-span-1">
+          <h2 className="section-title">Evidência do histórico</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Dados medidos pelo coletor. Não é opinião.</p>
+          {stats ? (
+            <dl className="mt-2">
+              <EvidenceRow label="Menor preço no período" value={brl(stats.min)} />
+              <EvidenceRow label="Preço médio no período" value={brl(stats.avg)} />
+              <EvidenceRow label="Maior preço no período" value={brl(stats.max)} />
+              <EvidenceRow label="Leituras de preço" value={Number(stats.n_points).toLocaleString("pt-BR")} />
+            </dl>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">Ainda há poucas leituras para resumir este produto.</p>
           )}
-        </FadeIn>
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {a?.is_hist_min ? (
+              <li className="flex items-center gap-1.5 font-medium text-emerald-700">
+                <Award className="h-4 w-4" aria-hidden="true" /> Menor preço já registrado
+              </li>
+            ) : null}
+            {a?.vs_avg30_pct != null ? (
+              <li className="flex items-center gap-1.5 text-slate-700">
+                <TrendingDown className="h-4 w-4" aria-hidden="true" />
+                {Number(a.vs_avg30_pct).toFixed(1)}% em relação à média de 30 dias
+              </li>
+            ) : null}
+          </ul>
+          {(a?.flags || []).length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Alertas">
+              {a.flags.map((f) => (
+                <span key={f} className="badge badge-warn">
+                  {f}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
 
-        {a && (a.score != null || a.summary || (a.flags || []).length > 0) && (
-          <FadeIn delay={0.15} className="w-full sm:w-[300px]">
-            <SpotlightCard className="p-4" spotlightColor="rgba(139,92,246,.15)">
-              <h3 className="flex items-center gap-1.5 text-[15px] font-bold">
-                <Bot size={16} className="text-violet-glow" /> Análise da IA
-              </h3>
-              {a.score != null && (
-                <div className={`mt-1 text-4xl font-extrabold ${a.score >= 80 ? "text-good" : a.score >= 60 ? "text-warn" : "text-accent-soft"}`}>
-                  {a.score}<small className="text-base text-mut">/100</small>
-                </div>
-              )}
-              {a.summary && <p className="mt-2 text-[13.5px] leading-relaxed">{a.summary}</p>}
-              {(a.flags || []).length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {a.flags.map((f) => <li key={f} className="badge badge-warn">{f}</li>)}
-                </ul>
-              )}
-              <div className="mt-2 space-y-0.5 text-[13px] text-mut">
-                {a.is_hist_min && <p className="flex items-center gap-1 text-good"><Award size={13} /> menor preço já registrado</p>}
-                {a.vs_avg30_pct != null && <p className="flex items-center gap-1"><TrendingDown size={13} /> {a.vs_avg30_pct.toFixed(1)}% vs média 30d</p>}
-                {a.ai_analyzed_at && <p className="text-[11px]">analisado {timeago(a.ai_analyzed_at)}</p>}
-              </div>
-            </SpotlightCard>
-          </FadeIn>
-        )}
+        <section aria-label="Análise automática" className="card-pad border-blue-200 lg:col-span-1">
+          <h2 className="section-title">Análise automática</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Interpretação gerada por IA a partir do histórico. Pode conter erros.</p>
+          {a?.score != null || a?.summary ? (
+            <>
+              <p className="mt-3 border-l-2 border-blue-600 pl-3 text-sm font-medium leading-relaxed text-slate-800">{verdict}</p>
+              {a?.summary ? <p className="mt-2 text-sm leading-relaxed text-slate-600">{a.summary}</p> : null}
+              {a?.ai_analyzed_at ? <p className="mt-2 text-xs text-slate-400">Analisado {timeago(a.ai_analyzed_at)}</p> : null}
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">Este produto ainda não passou pela análise automática.</p>
+          )}
+        </section>
       </div>
 
-      <FadeIn delay={0.2}>
-        <h2 className="mb-2 text-lg font-bold">Histórico de preço</h2>
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {PERIODS.map((pd) => (
-            <button key={pd.id} onClick={() => setPeriod(pd.id)}
-                    className={`btn btn-sm ${period === pd.id ? "" : "btn-ghost"}`}>{pd.label}</button>
-          ))}
-        </div>
-        {points.length >= 2 ? (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                      className="rounded-2xl border border-ink-700 bg-ink-850 p-3">
-            <Chart
-              type="area" height={260}
-              series={[{ name: "Preço", data: points }]}
-              options={{
-                chart: { toolbar: { show: false }, zoom: { enabled: false }, background: "transparent" },
-                theme: { mode: "dark" },
-                colors: ["#f43f5e"],
-                fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0 } },
-                stroke: { curve: "smooth", width: 2.5 },
-                dataLabels: { enabled: false },
-                xaxis: { type: "datetime", labels: { datetimeUTC: false }, axisBorder: { show: false }, axisTicks: { show: false } },
-                yaxis: { labels: { formatter: (v) => "R$ " + v.toLocaleString("pt-BR") } },
-                grid: { borderColor: "rgba(255,255,255,.06)" },
-                tooltip: { x: { format: "dd/MM HH:mm" } },
-              }}
-            />
-          </motion.div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-ink-700 bg-ink-900/50 py-8 text-center text-sm text-mut">
-            Histórico insuficiente — o gráfico aparece depois de mais ciclos.
+      {/* Histórico */}
+      <section aria-label="Histórico de preço" className="card-pad">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="section-title">Histórico de preço</h2>
+            <p className="text-xs text-slate-500">Valores em reais (R$) captados pelo coletor.</p>
           </div>
-        )}
-      </FadeIn>
-
-      <FadeIn delay={0.25}>
-        <h2 className="mb-2 flex items-center gap-1.5 text-lg font-bold"><Eye size={17} /> Watchlist</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {watched && <span className="badge badge-ok">monitorando</span>}
-          <input className="field w-[220px]" type="number" step="0.01" min="0"
-                 placeholder="Preço-alvo (R$) — opcional"
-                 value={target} onChange={(e) => setTarget(e.currentTarget.value)} />
-          <button className="btn" onClick={watch}>{watched ? "Atualizar alvo" : "Monitorar"}</button>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Período do histórico">
+            {PERIODS.map((pd) => (
+              <button
+                key={pd.id}
+                type="button"
+                onClick={() => setPeriod(pd.id)}
+                aria-pressed={period === pd.id}
+                className={`rounded-lg border px-3 py-1.5 text-[13px] font-semibold ${
+                  period === pd.id
+                    ? "border-blue-700 bg-blue-700 text-white"
+                    : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {pd.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </FadeIn>
-    </div>
+        <div className="mt-3">
+          {historyPoints.length >= 2 ? (
+            <PriceHistoryChart points={historyPoints} label={`Histórico de preço de ${p.title}`} />
+          ) : (
+            <p role="status" className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Histórico insuficiente. O gráfico aparece após mais ciclos de coleta.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Monitoramento */}
+      <section aria-label="Monitorar preço" className="card-pad">
+        <h2 className="section-title flex items-center gap-2">
+          <Eye className="h-4 w-4 text-slate-500" aria-hidden="true" /> Monitorar este produto
+        </h2>
+        <p className="mt-0.5 text-sm text-slate-600">
+          {watched ? "Este produto já está na sua lista. Ajuste o preço-alvo quando quiser." : "Receba um aviso quando o preço atingir sua meta."}
+        </p>
+        <form onSubmit={watch} className="mt-3 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="watch-target" className="label">
+              Preço-alvo (R$)
+            </label>
+            <input
+              id="watch-target"
+              className="field"
+              type="number"
+              step="0.01"
+              min="0"
+              inputMode="decimal"
+              placeholder="Ex.: 899,90"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn shrink-0" disabled={watchBusy}>
+            {watchBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {watched ? "Atualizar alvo" : "Monitorar"}
+          </button>
+        </form>
+        {watchMsg ? (
+          <p role={watchMsg.tone === "error" ? "alert" : "status"} className={`mt-2 text-sm font-medium ${watchMsg.tone === "error" ? "text-red-700" : "text-emerald-700"}`}>
+            {watchMsg.text}
+          </p>
+        ) : null}
+      </section>
+    </Page>
   )
 }
