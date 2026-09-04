@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { api } from "./lib/api"
 import { timeago } from "./lib/format"
+import { BrandMark } from "./components/BrandMark"
 import { FeedPage } from "./pages/Feed"
 import { ProductPage } from "./pages/Product"
 import { WatchlistPage } from "./pages/Watchlist"
@@ -164,9 +165,7 @@ function Shell({ onLogout, collector }) {
       {/* Sidebar desktop */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-200 bg-white lg:flex">
         <Link to="/" className="flex items-center gap-2.5 px-5 pb-5 pt-6" aria-label="Promobot — início">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-blue-700 text-white">
-            <Flame className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <BrandMark size={36} className="h-9 w-9" alt="PromoBot" />
           <span>
             <span className="block text-[17px] font-bold leading-none tracking-tight text-slate-900">Promobot</span>
             <span className="mt-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -219,9 +218,7 @@ function Shell({ onLogout, collector }) {
           <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between px-4 py-4">
               <span className="flex items-center gap-2">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-700 text-white">
-                  <Flame className="h-4 w-4" aria-hidden="true" />
-                </span>
+                <BrandMark size={32} className="h-8 w-8" alt="PromoBot" />
                 <span className="text-base font-bold text-slate-900">Promobot</span>
               </span>
               <button

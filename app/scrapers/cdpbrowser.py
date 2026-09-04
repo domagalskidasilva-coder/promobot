@@ -45,7 +45,7 @@ def launch_chrome() -> bool:
     """Relança o Chrome real com a porta de debug (só em desktop com display)."""
     import os
 
-    if not os.environ.get("DISPLAY"):
+    if not os.environ.get("DISPLAY") and not shutil.which("xvfb-run"):
         return False
     chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if not chrome:
@@ -59,8 +59,13 @@ def launch_chrome() -> bool:
         "--no-first-run",
         "--no-default-browser-check",
         "--restore-last-session",
+        "--no-sandbox",              # necessário dentro de container (root)
+        "--disable-dev-shm-usage",   # /dev/shm pequeno em container
+        "--disable-gpu",
         "about:blank",
     ]
+    if shutil.which("xvfb-run") and not os.environ.get("DISPLAY"):
+        cmd = ["xvfb-run", "--server-args=-screen 0 1280x800x24"] + cmd
     try:
         subprocess.Popen(
             cmd,

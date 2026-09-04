@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { Flame, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { api } from "../lib/api"
+import { BrandMark } from "../components/BrandMark"
 
 export function LoginPage({ onOk, standalone = true }) {
   const [user, setUser] = useState("")
@@ -31,9 +32,7 @@ export function LoginPage({ onOk, standalone = true }) {
       <main aria-labelledby="login-title" className="w-full max-w-sm">
         <form onSubmit={submit} className="card-pad space-y-3" noValidate={false}>
           <div className="flex items-center gap-2.5">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-blue-700 text-white" aria-hidden="true">
-              <Flame className="h-5 w-5" />
-            </span>
+            <BrandMark size={40} className="h-10 w-10" alt="PromoBot" />
             <span>
               <span id="login-title" className="block text-lg font-bold tracking-tight text-slate-900">
                 Promobot
