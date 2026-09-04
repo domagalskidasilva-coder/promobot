@@ -19,6 +19,7 @@ from ..config import get_settings
 from ..models import (
     Analysis,
     AppControl,
+    Store,
     EventLog,
     Offer,
     PriceHistory,
