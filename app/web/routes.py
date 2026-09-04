@@ -765,9 +765,12 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
     """
     from pathlib import Path
 
-    env_path = Path("/opt/promobot/.env")
-    if not env_path.is_file():
-        raise HTTPException(status_code=400, detail="só é editável na máquina do coletor (VPS)")
+    # dentro do container o .env fica em /app/.env; no host, /opt/promobot/.env
+    env_path = next((Path(p) for p in ("/app/.env", "/opt/promobot/.env")
+                     if Path(p).is_file()), None)
+    if env_path is None:
+        raise HTTPException(status_code=400,
+                            detail="arquivo .env não encontrado nesta máquina (configure via Environment Variables)")
 
     allowed = {k: str(body.get(k, "")).strip() for k in AFFILIATE_KEYS if k in body}
     lines = env_path.read_text().splitlines()
@@ -784,8 +787,10 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
             lines.append(f"{k}={v}")
     env_path.write_text("\n".join(lines) + "\n")
 
-    # reinicia o coletor para reler as variáveis
-    import subprocess
+    # reler as variáveis exige novo processo: no container, uvicorn é o PID 1
+    # e o restart policy religa tudo em seguida
+    import os
+    import signal
 
-    subprocess.Popen(["docker", "compose", "restart", "promobot"], cwd="/opt/promobot")
+    os.kill(1, signal.SIGTERM)
     return JSONResponse({"ok": True, "restarted": True})
