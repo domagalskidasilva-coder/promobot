@@ -428,3 +428,14 @@ async def run_coupons_cycle() -> dict:
     if stats["new"]:
         db.log_event("coupons", f"{stats['new']} cupom(ns) novos ({stats['found']} vistos).")
     return stats
+
+
+_breakers: dict[str, object] = {}
+
+
+def _make_breaker():
+    """Circuit breaker por marketplace (n falhas seguidas = pausa longa)."""
+    from .scrapers.base import CircuitBreaker
+
+    settings = get_settings()
+    return CircuitBreaker(settings.breaker_fail_threshold, settings.breaker_cooldown_hours * 3600)
