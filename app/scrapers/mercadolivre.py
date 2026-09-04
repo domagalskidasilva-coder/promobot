@@ -256,3 +256,17 @@ class MercadoLivreScraper:
 
         log.info("ML: %d ofertas coletadas", len(offers))
         return offers
+
+    # ---- Loja monitorada -----------------------------------------------------
+    async def collect_store(self, store) -> list[OfferRaw]:
+        """Varre a página da loja (tienda oficial, vendedor ou lista de busca
+        salva). Usa o mesmo parser do feed; cai pro Chrome real se bloquear."""
+        url = store.url or _SEARCH.format(query=quote_plus(store.query.lower().replace(" ", "-")))
+        html, blocked = await self._render_page(url)
+        offers = self._parse_listing(html, f"loja:{store.name}")
+        if not offers and blocked:
+            log.info("ML bloqueou a loja '%s' no headless — tentando via Chrome real (CDP).", store.name)
+            html = await self._render_page_cdp(url)
+            offers = self._parse_listing(html or "", f"loja:{store.name}")
+        log.info("ML loja '%s': %d ofertas", store.name, len(offers))
+        return offers

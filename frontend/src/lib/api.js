@@ -33,6 +33,10 @@ export const api = {
   toggleKeyword: (id) => req(`/api/keywords/${id}/toggle`, { method: "POST" }),
   deleteKeyword: (id) => req(`/api/keywords/${id}/delete`, { method: "POST" }),
   watchlist: () => req("/api/watchlist"),
+  stores: () => req("/api/stores"),
+  addStore: (payload) => req("/api/stores", { method: "POST", body: JSON.stringify(payload) }),
+  toggleStore: (id) => req(`/api/stores/${id}/toggle`, { method: "POST" }),
+  deleteStore: (id) => req(`/api/stores/${id}/delete`, { method: "POST" }),
   addWatch: (product_id, target_price) =>
     req("/api/watchlist", { method: "POST", body: JSON.stringify({ product_id, target_price }) }),
   deleteWatch: (id) => req(`/api/watchlist/${id}/delete`, { method: "POST" }),

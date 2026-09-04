@@ -150,6 +150,68 @@ class AmazonScraper:
         log.info("Amazon: %d ofertas coletadas", len(offers))
         return offers
 
+    # ---- Loja monitorada -----------------------------------------------------
+    async def collect_store(self, store) -> list[OfferRaw]:
+        """Varre uma loja/vendedor da Amazon: URL de storefront (/stores/...),
+        busca por vendedor (/s?me=SELLERID) ou busca pelo nome da loja."""
+        import re as _re
+
+        q = store.query.strip()
+        if store.url:
+            url = store.url
+        elif _re.fullmatch(r"[A-Z0-9]{6,18}", q):
+            url = f"https://www.amazon.com.br/s?me={q}"  # seller id
+        else:
+            url = f"https://www.amazon.com.br/s?k={quote_plus(q)}"
+        offers: list[OfferRaw] = []
+        async with manager.page_for(self.marketplace) as page:
+            await self.limiter.wait()
+            await page.goto(url, wait_until="domcontentloaded")
+            await self._human_pause()
+            if "captcha" in (page.url or "").lower():
+                log.warning("Amazon: CAPTCHA na loja '%s'", store.name)
+                return []
+            cards = page.locator("div[data-component-type='s-search-result']")
+            count = min(await cards.count(), get_settings().results_per_keyword)
+            for i in range(count):
+                card = cards.nth(i)
+                try:
+                    asin = await card.get_attribute("data-asin")
+                    if not asin:
+                        continue
+                    title_el = card.locator("h2 a span, h2 span").first
+                    title = (await title_el.text_content()) if await title_el.count() else ""
+                    if not title:
+                        continue
+                    price_el = card.locator("span.a-price span.a-offscreen").first
+                    price_txt = await price_el.text_content() if await price_el.count() else None
+                    if not price_txt:
+                        continue
+                    price = _parse_brl(price_txt)
+                    if not price:
+                        continue
+                    list_el = card.locator("span.a-price.a-text-price span.a-offscreen").first
+                    list_price = _parse_brl(await list_el.text_content()) if await list_el.count() else None
+                    img_el = card.locator("img.s-image").first
+                    img = await img_el.get_attribute("src") if await img_el.count() else None
+                    offers.append(
+                        OfferRaw(
+                            marketplace=self.marketplace,
+                            external_id=asin,
+                            title=title.strip(),
+                            url=f"https://www.amazon.com.br/dp/{asin}",
+                            price=price,
+                            list_price=list_price,
+                            image_url=img,
+                            category=_classify(title),
+                            source={"via": "loja", "loja": store.name},
+                        )
+                    )
+                except Exception as exc:
+                    log.debug("Card da loja Amazon pulado: %s", exc)
+        log.info("Amazon loja '%s': %d ofertas", store.name, len(offers))
+        return offers
+
 
 def _classify(title: str) -> str | None:
     t = title.lower()

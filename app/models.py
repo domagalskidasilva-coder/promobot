@@ -159,3 +159,19 @@ class AppControl(Base):
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class Store(Base):
+    """Loja monitorada: virtual (ML/Amazon/Shopee) ou física (redes sociais)."""
+
+    __tablename__ = "stores"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    marketplace: Mapped[str] = mapped_column(String(20))  # ml | amazon | shopee | fisica
+    # ML: nome da loja oficial · Amazon: seller id ou nome · Shopee: shopid
+    # Física: redes sociais/@ (instagram, tiktok...)
+    query: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

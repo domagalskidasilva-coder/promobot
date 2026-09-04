@@ -195,6 +195,7 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
     from .scrapers.amazon import AmazonScraper
     from .scrapers.mercadolivre import MercadoLivreScraper
     from .scrapers.shopee import ShopeeScraper
+    from .models import Store
 
     settings = get_settings()
     stats = {"collected": 0, "new": 0, "updated": 0, "price_changed": 0, "ai_analyzed": 0, "alerts": 0}
@@ -207,6 +208,15 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
     if scraper_names:
         scrapers = {k: v for k, v in scrapers.items() if k in scraper_names}
 
+    # lojas ativas por marketplace (monitoramento de lojas)
+    with db.SessionLocal() as db_:
+        store_rows = db_.execute(
+            select(Store).where(Store.active.is_(True))
+        ).scalars().all()
+    stores_by_mp: dict[str, list] = {}
+    for st_ in store_rows:
+        stores_by_mp.setdefault(st_.marketplace, []).append(st_)
+
     for name, scraper in scrapers.items():
         breaker = _breakers.setdefault(name, _make_breaker())
         if breaker.is_open:
@@ -215,6 +225,12 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
         try:
             keywords = _active_keywords()
             raw = await scraper.collect(keywords)
+            # monitoramento de lojas deste marketplace
+            for store in stores_by_mp.get(name, []):
+                try:
+                    raw.extend(await scraper.collect_store(store))
+                except Exception as exc:
+                    db.log_event(f"scraper:{name}", f"Loja '{store.name}' falhou: {exc}", level="warn")
             breaker.record_success()
             stats["collected"] += len(raw)
             with db.SessionLocal() as db_:

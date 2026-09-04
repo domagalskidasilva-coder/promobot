@@ -121,3 +121,83 @@ class ShopeeScraper:
                 log.warning("Busca Shopee falhou para '%s': %s", kw, exc)
         log.info("Shopee: %d ofertas coletadas", len(offers))
         return offers
+
+    # ---- Loja monitorada -----------------------------------------------------
+    async def collect_store(self, store) -> list[OfferRaw]:
+        """Varre uma loja da Shopee: aceita shopid numérico ou URL da loja
+        (shopee.com.br/shop/SHOPID ou nome). Intercepta o JSON da API interna."""
+        import re as _re
+        from urllib.parse import urlparse as _urlparse
+
+        q = store.query.strip()
+        if q.isdigit():
+            shopid = q
+        else:
+            m = _re.search(r"/shop/(\d+)", store.url or "")
+            shopid = m.group(1) if m else None
+        if not shopid:
+            log.warning("Shopee loja '%s': sem shopid — informe o número ou a URL /shop/ID", store.name)
+            return []
+
+        captured: list[dict] = []
+
+        async def _on_response(response):
+            try:
+                if "/api/v4/shop/search_items" in response.url or "shop/get_shop_tab" in response.url:
+                    data = await response.json()
+                    if isinstance(data, dict):
+                        captured.append(data)
+            except Exception:
+                pass
+
+        async with manager.page_for(self.marketplace) as page:
+            page.on("response", _on_response)
+            await self.limiter.wait()
+            await page.goto(f"https://shopee.com.br/shop/{shopid}", wait_until="domcontentloaded")
+            for _ in range(3):
+                await page.mouse.wheel(0, 1200)
+                await asyncio.sleep(1.2)
+            await page.wait_for_timeout(2000)
+
+        offers: list[OfferRaw] = []
+        seen: set[int] = set()
+        for payload in captured:
+            sections = payload.get("items") or []
+            if isinstance(payload.get("data"), dict):
+                sections = payload["data"].get("items") or sections
+            for entry in sections:
+                item = entry.get("item_basic") or entry
+                itemid = item.get("itemid")
+                if itemid is None or itemid in seen:
+                    continue
+                price = item.get("price")
+                if not price:
+                    continue
+                price_val = price / 100_000
+                if price_val <= 0:
+                    continue
+                price_before = item.get("price_before_discount") or 0
+                list_price = price_before / 100_000 if price_before > price else None
+                shopid_i = item.get("shopid") or shopid
+                seen.add(itemid)
+                name = (item.get("name") or "").strip()
+                if not name:
+                    continue
+                rating = (item.get("item_rating") or {}).get("rating_star")
+                offers.append(
+                    OfferRaw(
+                        marketplace=self.marketplace,
+                        external_id=str(itemid),
+                        title=name[:300],
+                        url=f"https://shopee.com.br/product/{shopid_i}/{itemid}",
+                        price=round(price_val, 2),
+                        list_price=round(list_price, 2) if list_price else None,
+                        image_url=(f"https://cf.shopee.com.br/file/{item['image']}_tn" if item.get("image") else None),
+                        rating=round(rating, 2) if rating else None,
+                        sold=item.get("historical_sold") or None,
+                        category=_classify(name),
+                        source={"via": "loja", "loja": store.name},
+                    )
+                )
+        log.info("Shopee loja '%s': %d ofertas", store.name, len(offers))
+        return offers

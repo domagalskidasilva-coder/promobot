@@ -299,6 +299,75 @@ async def api_delete_keyword(kw_id: int, _: bool = Depends(require_login)):
 
 
 # --------------------------------------------------------------------------
+# lojas monitoradas
+# --------------------------------------------------------------------------
+def _detect_marketplace(url: str, query: str) -> str:
+    u = (url or "").lower()
+    if "mercadolivre" in u or "mercadolibre" in u:
+        return "ml"
+    if "amazon." in u:
+        return "amazon"
+    if "shopee" in u:
+        return "shopee"
+    if url.startswith("http"):
+        return "fisica"  # loja física/redes sociais com URL própria
+    return "ml"  # default: busca por nome no ML
+
+
+@router.get("/api/stores")
+async def api_stores(_: bool = Depends(require_login)):
+    with db.SessionLocal() as db_:
+        rows = db_.execute(select(Store).order_by(Store.created_at.desc())).scalars().all()
+        return JSONResponse([
+            {"id": s.id, "name": s.name, "marketplace": s.marketplace,
+             "query": s.query, "url": s.url, "active": s.active,
+             "created_at": s.created_at.isoformat()}
+            for s in rows
+        ])
+
+
+@router.post("/api/stores")
+async def api_add_store(body: dict, _: bool = Depends(require_login)):
+    name = (body.get("name") or "").strip()
+    url = (body.get("url") or "").strip()
+    query = (body.get("query") or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="nome da loja obrigatório")
+    if not url and not query:
+        raise HTTPException(status_code=422, detail="informe URL ou nome/seller da loja")
+    marketplace = body.get("marketplace") or _detect_marketplace(url, query)
+    with db.SessionLocal() as db_:
+        dup = db_.execute(select(Store).where(Store.name == name)).scalar_one_or_none()
+        if dup:
+            raise HTTPException(status_code=409, detail="loja já cadastrada")
+        db_.add(Store(name=name, marketplace=marketplace,
+                      query=query or name, url=url or None))
+        db_.commit()
+    return JSONResponse({"ok": True, "marketplace": marketplace})
+
+
+@router.post("/api/stores/{store_id}/toggle")
+async def api_toggle_store(store_id: int, _: bool = Depends(require_login)):
+    with db.SessionLocal() as db_:
+        s = db_.get(Store, store_id)
+        if s is None:
+            raise HTTPException(status_code=404, detail="não encontrada")
+        s.active = not s.active
+        db_.commit()
+        return JSONResponse({"ok": True, "active": s.active})
+
+
+@router.post("/api/stores/{store_id}/delete")
+async def api_delete_store(store_id: int, _: bool = Depends(require_login)):
+    with db.SessionLocal() as db_:
+        s = db_.get(Store, store_id)
+        if s:
+            db_.delete(s)
+            db_.commit()
+    return JSONResponse({"ok": True})
+
+
+# --------------------------------------------------------------------------
 # watchlist
 # --------------------------------------------------------------------------
 @router.get("/api/watchlist")
