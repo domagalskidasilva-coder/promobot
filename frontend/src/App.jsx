@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Flame, Eye, Tag, ChartNoAxesColumn, RefreshCw, Loader2, Zap, ShieldCheck, Clock3 } from "lucide-react"
+import { Flame, Eye, Tag, ChartNoAxesColumn, RefreshCw, Loader2, Zap, ShieldCheck, Clock3, Sparkles, Search } from "lucide-react"
 import { api } from "./lib/api"
 import { Routes, Route, Link, NavLink, useLocation, useNavigate } from "react-router-dom"
 import { FeedPage } from "./pages/Feed"
@@ -8,6 +8,7 @@ import { ProductPage } from "./pages/Product"
 import { WatchlistPage } from "./pages/Watchlist"
 import { KeywordsPage } from "./pages/Keywords"
 import { StatusPage } from "./pages/Status"
+import { InsightsPage } from "./pages/Insights"
 import { LoginPage } from "./pages/Login"
 
 function timeago(iso) {
@@ -42,6 +43,7 @@ function Sidebar() {
     { to: "/", label: "Ofertas", icon: Flame },
     { to: "/watchlist", label: "Watchlist", icon: Eye },
     { to: "/keywords", label: "Palavras-chave", icon: Tag },
+    { to: "/insights", label: "Insights", icon: Sparkles },
     { to: "/status", label: "Status", icon: ChartNoAxesColumn },
   ]
 
@@ -86,6 +88,23 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* busca rápida */}
+      <div className="px-4 pb-3">
+        <div className="relative">
+          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut" />
+          <input
+            className="field py-1.5 pl-8 text-[12.5px]"
+            placeholder="buscar no catálogo…"
+            defaultValue=""
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                navigate("/?q=" + encodeURIComponent(e.currentTarget.value.trim()))
+              }
+            }}
+          />
+        </div>
+      </div>
 
       {/* coleta */}
       <div className="px-4 pb-5">
@@ -133,7 +152,8 @@ export default function App() {
               <Route path="/produto/:id" element={auth ? <ProductPage /> : <LoginPage onOk={() => setAuth(true)} />} />
               <Route path="/watchlist" element={auth ? <WatchlistPage /> : <LoginPage onOk={() => setAuth(true)} />} />
               <Route path="/keywords" element={auth ? <KeywordsPage /> : <LoginPage onOk={() => setAuth(true)} />} />
-              <Route path="/status" element={auth ? <StatusPage /> : <LoginPage onOk={() => setAuth(true)} />} />
+              <Route path="/insights" element={auth ? <InsightsPage /> : <LoginPage onOk={() => setAuth(true)} />} />
+            <Route path="/status" element={auth ? <StatusPage /> : <LoginPage onOk={() => setAuth(true)} />} />
             </Routes>
           </AnimatePresence>
         </main>

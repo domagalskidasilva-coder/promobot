@@ -24,6 +24,8 @@ export const api = {
     return req(`/api/offers?${qs}`)
   },
   product: (id) => req(`/api/product/${id}`),
+  insights: () => req("/api/insights"),
+  sparklines: (ids) => req(`/api/sparklines?ids=${ids}`),
   status: () => req("/api/status"),
   keywords: () => req("/api/keywords"),
   addKeyword: (keyword) =>

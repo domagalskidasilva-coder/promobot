@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 
 from .. import db, pipeline
 from ..collector import collector
@@ -444,3 +444,119 @@ async def healthz():
         "collector_running": collector.running,
         "ts": utcnow().isoformat(),
     })
+
+
+# --------------------------------------------------------------------------
+# insights (página de analytics) + sparklines
+# --------------------------------------------------------------------------
+@router.get("/api/insights")
+async def api_insights(_: bool = Depends(require_login)):
+    import re
+
+    with db.SessionLocal() as db_:
+        by_market = [
+            {"label": MARKET_LABEL.get(k, k), "value": v}
+            for k, v in db_.execute(
+                select(Product.marketplace, func.count()).group_by(Product.marketplace)
+            ).all()
+        ]
+        by_category = [
+            {"label": ({"games": "Jogos", "electronics": "Eletrônicos"}.get(k) or "Outros"), "value": v}
+            for k, v in db_.execute(
+                select(Product.category, func.count()).group_by(Product.category)
+            ).all()
+        ]
+        avg_price_cat = [
+            {"label": ({"games": "Jogos", "electronics": "Eletrônicos"}.get(k) or "Outros"),
+             "avg": round(float(a or 0), 2)}
+            for k, a in db_.execute(
+                select(Product.category, func.avg(Offer.price))
+                .join(Offer, Offer.product_id == Product.id)
+                .group_by(Product.category)
+            ).all()
+        ]
+        novos_7d = [
+            {"d": str(d), "n": n}
+            for d, n in db_.execute(text(
+                "SELECT date(first_seen_at) AS d, count(*) FROM products "
+                "WHERE first_seen_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 1"
+            )).all()
+        ]
+        score_hist = [
+            {"bucket": int(b), "n": n}
+            for b, n in db_.execute(text(
+                "SELECT floor(score/10)*10 AS b, count(*) FROM offers_analysis "
+                "WHERE score IS NOT NULL GROUP BY 1 ORDER BY 1"
+            )).all()
+        ]
+
+        stmt = _filtered_stmt(None, None, None, None, None, False, "discount").limit(10)
+        top_discounts = []
+        for o, p, a in db_.execute(stmt).all():
+            top_discounts.append({
+                "product": {"id": p.id, "title": p.title[:80], "marketplace": p.marketplace},
+                "price": o.price, "list_price": o.list_price,
+                "real_discount_pct": a.real_discount_pct,
+                "market_label": MARKET_LABEL.get(p.marketplace, p.marketplace),
+            })
+
+        drops_rows = db_.execute(text(
+            """
+            WITH recent AS (
+                SELECT product_id, price,
+                       row_number() OVER (PARTITION BY product_id ORDER BY captured_at DESC) AS rn,
+                       max(price) OVER (PARTITION BY product_id) AS max_recent
+                FROM price_history
+                WHERE captured_at >= now() - interval '48 hours'
+            )
+            SELECT r.product_id, p.title, p.marketplace, r.price, r.max_recent
+            FROM recent r
+            JOIN products p ON p.id = r.product_id
+            WHERE r.rn = 1 AND r.max_recent > r.price * 1.05
+            ORDER BY (r.max_recent - r.price) / r.max_recent DESC
+            LIMIT 10
+            """
+        )).all()
+        drops = [
+            {"id": pid, "title": title[:80], "marketplace": mp,
+             "price": price, "was": was,
+             "drop_pct": round((1 - price / was) * 100, 1),
+             "market_label": MARKET_LABEL.get(mp, mp)}
+            for pid, title, mp, price, was in drops_rows
+        ]
+
+        cycles = []
+        evs = db_.execute(
+            select(EventLog).where(EventLog.scope == "pipeline")
+            .order_by(EventLog.created_at.desc()).limit(24)
+        ).scalars().all()
+        for e in reversed(evs):
+            m = re.search(r"'collected': (\d+), 'new': (\d+)", e.message)
+            if m:
+                cycles.append({"ts": e.created_at.isoformat(),
+                               "collected": int(m.group(1)), "new": int(m.group(2))})
+
+        return JSONResponse({
+            "by_market": by_market, "by_category": by_category,
+            "avg_price_cat": avg_price_cat, "novos_7d": novos_7d,
+            "score_hist": score_hist, "top_discounts": top_discounts,
+            "drops_48h": drops, "cycles": cycles,
+        })
+
+
+@router.get("/api/sparklines")
+async def api_sparklines(ids: str, _: bool = Depends(require_login)):
+    """Últimos pontos de preço para mini-gráficos dos cards. ids=1,2,3..."""
+    id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()][:48]
+    if not id_list:
+        return JSONResponse({})
+    with db.SessionLocal() as db_:
+        rows = db_.execute(
+            select(PriceHistory.product_id, PriceHistory.price, PriceHistory.captured_at)
+            .where(PriceHistory.product_id.in_(id_list))
+            .order_by(PriceHistory.product_id, PriceHistory.captured_at)
+        ).all()
+    out: dict[str, list[float]] = {}
+    for pid, price, _ts in rows:
+        out.setdefault(str(pid), []).append(price)
+    return JSONResponse({k: v[-24:] for k, v in out.items()})

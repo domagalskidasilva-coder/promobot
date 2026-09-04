@@ -3,10 +3,11 @@ import { motion } from "framer-motion"
 import { Link, useSearchParams } from "react-router-dom"
 import {
   Search, Flame, TrendingDown, Award, Bot, Store, Gamepad2, Monitor,
-  ArrowUpRight, ChevronLeft, ChevronRight, FilterX, Radar, Zap, Clock3,
+  ArrowUpRight, ChevronLeft, ChevronRight, FilterX, Radar, Zap, Clock3, LayoutGrid, Table2,
 } from "lucide-react"
 import { api } from "../lib/api"
-import { SpotlightCard, CountUp, FadeIn, ShinyText } from "../components/fx"
+import { SpotlightCard, CountUp, FadeIn, ShinyText, ScorePill } from "../components/fx"
+import { Sparkline } from "../components/Sparkline"
 import { timeago } from "../App"
 
 const SORTS = [
@@ -204,6 +205,10 @@ export function FeedPage() {
   const [all, setAll] = useState({ items: [], total: 0, pages: 1, page: 1 })
   const [data, setData] = useState({ items: [], total: 0, pages: 1, page: 1 })
   const [loading, setLoading] = useState(true)
+  const [sparks, setSparks] = useState({})
+  const [view, setView] = useState(() => localStorage.getItem("pb_view") || "grid")
+
+  const changeView = (v) => { setView(v); localStorage.setItem("pb_view", v) }
   const page = parseInt(searchParams.get("page") || "1", 10)
   const filters = {
     q: searchParams.get("q") || "",
@@ -223,7 +228,11 @@ export function FeedPage() {
   useEffect(() => {
     setLoading(true)
     api.offers({ ...filters, page, limit: 32 })
-      .then(setData)
+      .then((d) => {
+        setData(d)
+        const ids = (d.items || []).map((x) => x.product.id).join(",")
+        if (ids) api.sparklines(ids).then(setSparks).catch(() => setSparks({}))
+      })
       .catch(() => setData({ items: [], total: 0, pages: 1, page: 1 }))
       .finally(() => setLoading(false))
   }, [searchParams])
@@ -282,6 +291,16 @@ export function FeedPage() {
                  defaultValue={filters.max_price}
                  onChange={(e) => e.currentTarget.value === "" && set("max_price", "")}
                  onKeyDown={(e) => e.key === "Enter" && set("max_price", e.currentTarget.value)} />
+          <div className="ml-auto flex overflow-hidden rounded-lg border border-white/10">
+            <button title="grade" onClick={() => changeView("grid")}
+                    className={`px-2 py-1.5 ${view === "grid" ? "bg-accent/20 text-white" : "text-mut hover:text-white"}`}>
+              <LayoutGrid size={15} />
+            </button>
+            <button title="tabela" onClick={() => changeView("table")}
+                    className={`px-2 py-1.5 ${view === "table" ? "bg-accent/20 text-white" : "text-mut hover:text-white"}`}>
+              <Table2 size={15} />
+            </button>
+          </div>
           <button onClick={() => set("hot_only", !filters.hot_only)}
                   className={`btn btn-sm ${filters.hot_only ? "" : "btn-ghost"}`}>
             <Flame size={13} /> quentes
@@ -312,9 +331,46 @@ export function FeedPage() {
         </FadeIn>
       )}
 
-      <div className={`grid grid-cols-3 gap-4 transition-opacity duration-200 xl:grid-cols-4 ${loading ? "opacity-40" : ""}`}>
-        {data.items.map((d, i) => <OfferCard key={`${d.product.id}-${filters.sort}-${i}`} d={d} rank={i} />)}
-      </div>
+      {view === "grid" ? (
+        <div className={`grid grid-cols-3 gap-4 transition-opacity duration-200 xl:grid-cols-4 ${loading ? "opacity-40" : ""}`}>
+          {data.items.map((d, i) => <OfferCard key={`${d.product.id}-${filters.sort}-${i}`} d={d} rank={i} />)}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+          <table className="w-full text-[13px]">
+            <thead className="border-b border-white/[0.08] text-left text-mut">
+              <tr>
+                <th className="px-4 py-2.5 font-semibold">Produto</th>
+                <th className="px-3 py-2.5 font-semibold">Site</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Preço</th>
+                <th className="px-3 py-2.5 text-right font-semibold">De</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Real</th>
+                <th className="px-3 py-2.5 text-center font-semibold">IA</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Visto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((d) => (
+                <tr key={d.product.id} className="border-b border-white/[0.05] transition hover:bg-white/[0.03]">
+                  <td className="max-w-[420px] px-4 py-2.5">
+                    <Link to={`/produto/${d.product.id}`} className="line-clamp-1 font-medium text-white/90 hover:text-white">
+                      {d.product.title}
+                    </Link>
+                  </td>
+                  <td className={`market mkt-${d.product.marketplace} px-3 py-2.5`}>{d.market_label}</td>
+                  <td className="px-3 py-2.5 text-right font-extrabold">R$ {Number(d.offer.price).toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-right text-mut"><s>{d.offer.list_price ? `R$ ${Number(d.offer.list_price).toFixed(0)}` : "—"}</s></td>
+                  <td className="px-3 py-2.5 text-right text-good">{d.analysis?.real_discount_pct ? `−${Math.round(d.analysis.real_discount_pct)}%` : "—"}</td>
+                  <td className="px-3 py-2.5 text-center">
+                    {d.analysis?.score != null ? <ScorePill score={d.analysis.score} /> : <span className="text-mut">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-mut">{timeago(d.offer.updated_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {data.pages > 1 && (
         <div className="flex items-center justify-center gap-4 py-5">
