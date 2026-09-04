@@ -474,9 +474,23 @@ async def cycle_status(_: bool = Depends(require_login)):
             latest = _gh_latest_run(s)
             if latest:
                 st = latest.get("status")
-                running = st in ("queued", "in_progress", "waiting", "pending")
-                return JSONResponse({"running": running, "state": st,
-                                     "url": latest.get("html_url")})
+                if st in ("queued", "in_progress", "waiting", "pending"):
+                    return JSONResponse({"running": True, "state": st,
+                                         "url": latest.get("html_url")})
+                # concluído há menos de 2 min → banner de sucesso no painel
+                finished = latest.get("run_started_at")
+                if finished:
+                    from datetime import datetime, timezone, timedelta as td
+
+                    try:
+                        dt = datetime.fromisoformat(str(finished).replace("Z", "+00:00"))
+                        if datetime.now(timezone.utc) - dt <= td(minutes=6):
+                            return JSONResponse({"running": False, "state": "concluido_recente",
+                                                 "conclusion": latest.get("conclusion"),
+                                                 "url": latest.get("html_url")})
+                    except Exception:
+                        pass
+                return JSONResponse({"running": False, "state": "idle"})
         return JSONResponse({"running": False, "state": "idle"})
     return JSONResponse({"running": collector.running, "state": "running" if collector.running else "idle"})
 
