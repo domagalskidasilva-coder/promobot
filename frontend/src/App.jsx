@@ -111,7 +111,7 @@ function Sidebar() {
         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={collect} disabled={collecting}
           className="btn w-full">
-          {collecting ? <><Loader2 size={15} className="animate-spin" /> Coletando…</>
+          {collecting ? <><Loader2 size={15} className="animate-spin" /> {cloud === "fila" ? "Na fila na nuvem…" : "Coletando…"}</>
                       : <><Zap size={15} /> Buscar agora</>}
         </motion.button>
         <div className="mt-3 space-y-1.5 px-1 text-[11px] text-mut/80">

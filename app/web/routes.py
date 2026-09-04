@@ -403,6 +403,37 @@ def _set_control(db_, key: str, value: str) -> None:
     db_.commit()
 
 
+def _gh_latest_run(s):
+    import httpx
+
+    try:
+        r = httpx.get(
+            f"https://api.github.com/repos/{s.github_repo}/actions/workflows/collect.yml/runs?per_page=1",
+            headers={"Authorization": f"Bearer {s.github_token}",
+                     "Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return None
+        runs = r.json().get("workflow_runs", [])
+        return runs[0] if runs else None
+    except Exception:
+        return None
+
+
+def _gh_dispatch(s) -> tuple[bool, str]:
+    import httpx
+
+    r = httpx.post(
+        f"https://api.github.com/repos/{s.github_repo}/actions/workflows/collect.yml/dispatches",
+        headers={"Authorization": f"Bearer {s.github_token}",
+                 "Accept": "application/vnd.github+json"},
+        json={"ref": "main"},
+        timeout=15,
+    )
+    return r.status_code < 300, f"GitHub: {r.status_code}"
+
+
 @router.post("/buscar-agora")
 async def buscar_agora(request: Request, _: bool = Depends(require_login)):
     """No coletor local: executa o ciclo direto. Na Vercel: grava o pedido no
@@ -413,17 +444,14 @@ async def buscar_agora(request: Request, _: bool = Depends(require_login)):
     if IS_SERVERLESS:
         s = get_settings()
         if s.github_token and s.github_repo:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.post(
-                    f"https://api.github.com/repos/{s.github_repo}/actions/workflows/collect.yml/dispatches",
-                    headers={"Authorization": f"Bearer {s.github_token}",
-                             "Accept": "application/vnd.github+json"},
-                    json={"ref": "main"},
-                )
-                if r.status_code >= 300:
-                    raise HTTPException(status_code=502, detail=f"GitHub: {r.status_code}")
+            latest = _gh_latest_run(s)
+            if latest and latest.get("status") in ("queued", "in_progress", "waiting", "pending"):
+                return JSONResponse({"ok": False, "already": True,
+                                     "state": latest.get("status"),
+                                     "url": latest.get("html_url")})
+            ok, detail = await _gh_dispatch(s)
+            if not ok:
+                raise HTTPException(status_code=502, detail=detail)
             return JSONResponse({"ok": True, "via": "github"})
         # fallback legado: grava flag no banco (coletor local consome)
         with db.SessionLocal() as db_:
@@ -441,10 +469,15 @@ async def cycle_status(_: bool = Depends(require_login)):
     from ..main import IS_SERVERLESS
 
     if IS_SERVERLESS:
-        with db.SessionLocal() as db_:
-            raw = _get_control(db_, "collect_request") or ""
-        state = "idle" if raw == "" else raw.split(":")[0]
-        return JSONResponse({"running": state in ("requested", "running"), "state": state})
+        s = get_settings()
+        if s.github_token and s.github_repo:
+            latest = _gh_latest_run(s)
+            if latest:
+                st = latest.get("status")
+                running = st in ("queued", "in_progress", "waiting", "pending")
+                return JSONResponse({"running": running, "state": st,
+                                     "url": latest.get("html_url")})
+        return JSONResponse({"running": False, "state": "idle"})
     return JSONResponse({"running": collector.running, "state": "running" if collector.running else "idle"})
 
 
