@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.env
+data/
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+.vercel
+vercel-env.txt
+leads-bot/

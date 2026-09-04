@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Status — {{ app_name }}{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mt-2.5">Status do sistema</h1>
+
+<section class="grid grid-cols-2 lg:grid-cols-5 gap-3 my-3.5" data-animate>
+  <div class="kpi"><b class="text-[26px]" data-countup="{{ n_offers }}">{{ n_offers }}</b><span class="text-mut text-xs">produtos no banco</span></div>
+  <div class="kpi"><b class="text-[26px]" data-countup="{{ n_watch }}">{{ n_watch }}</b><span class="text-mut text-xs">na watchlist</span></div>
+  <div class="kpi"><b class="text-[26px]" data-countup="{{ ai_ok }}">{{ ai_ok }}</b><span class="text-mut text-xs">análises de IA feitas</span></div>
+  <div class="kpi"><b class="text-[26px]">{{ 'sim' if ai_enabled else 'não' }}</b><span class="text-mut text-xs">IA Gemini</span></div>
+  <div class="kpi"><b class="text-[26px]">{{ 'sim' if email_configured else 'não' }}</b><span class="text-mut text-xs">e-mail</span></div>
+</section>
+
+<h2 class="text-lg font-bold mt-7 mb-2.5">Coleta por site</h2>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3" data-animate>
+  {% for scope, info in by_source.items() %}
+    {% set mp = scope.replace('scraper:','') %}
+    <div class="rounded-xl border border-ink-700 bg-ink-850 px-4 py-3.5">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="market market-{{ mp }}">{{ {'ml':'Mercado Livre','amazon':'Amazon','shopee':'Shopee'}[mp] }}</span>
+        {% if info.ok %}
+          <span class="badge badge-ok">coletando</span>
+        {% else %}
+          <span class="badge badge-warn">sem coleta</span>
+        {% endif %}
+      </div>
+      {% if info.ok %}
+        <p class="text-mut text-[13px] my-0.5">última: <span data-ts="{{ info.ok.created_at }}">{{ info.ok.created_at | timeago }}</span></p>
+        <p class="text-mut text-[13px] my-0.5">{{ info.ok.message[:100] }}</p>
+      {% else %}
+        <p class="text-mut text-[13px] my-0.5">nenhuma coleta bem-sucedida registrada ainda.</p>
+      {% endif %}
+      {% if info.errors_24h %}<small class="flag-note mt-1">{{ info.errors_24h }} erro(s) nas últimas 24h</small>{% endif %}
+    </div>
+  {% endfor %}
+</div>
+
+<h2 class="text-lg font-bold mt-7 mb-2.5">Eventos recentes</h2>
+<form method="get" action="/status" class="flex flex-wrap gap-2 mb-3">
+  <select name="level" class="field">
+    <option value="">Todos os níveis</option>
+    {% for lv, label in [('info','info'), ('warn','avisos'), ('error','erros')] %}
+      <option value="{{ lv }}" {% if level == lv %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn">Filtrar</button>
+</form>
+<div class="overflow-hidden rounded-xl border border-ink-700 bg-ink-850 overflow-x-auto" data-animate>
+  <table class="w-full text-[13.5px]">
+    <thead class="text-mut text-left">
+      <tr class="border-b border-ink-700">
+        <th class="px-3 py-2 font-semibold whitespace-nowrap">Quando</th>
+        <th class="px-3 py-2 font-semibold">Nível</th>
+        <th class="px-3 py-2 font-semibold whitespace-nowrap">Origem</th>
+        <th class="px-3 py-2 font-semibold">Mensagem</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in events %}
+      <tr class="border-b border-ink-700 last:border-0">
+        <td class="px-3 py-2 whitespace-nowrap text-mut" data-ts="{{ e.created_at }}">{{ e.created_at | timeago }}</td>
+        <td class="px-3 py-2">
+          <span class="badge {{ 'badge-ok' if e.level == 'info' else 'badge-warn' if e.level == 'warn' else 'badge-danger' }}">{{ e.level }}</span>
+        </td>
+        <td class="px-3 py-2 whitespace-nowrap">{{ e.scope }}</td>
+        <td class="px-3 py-2">{{ e.message[:170] }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="px-3 py-3 text-mut">Sem eventos ainda.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

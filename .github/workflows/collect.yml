@@ -1,0 +1,45 @@
+name: Coleta de promoções
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # a cada 30 min (com jitter natural do GH)
+  workflow_dispatch: {}        # botão "Run workflow" manual
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Coletar e processar
+        env:
+          PROMOBOT_DATABASE_URL: ${{ secrets.PROMOBOT_DATABASE_URL }}
+          PROMOBOT_GEMINI_API_KEY: ${{ secrets.PROMOBOT_GEMINI_API_KEY }}
+          PROMOBOT_DISABLE_SCHEDULER: "true"
+          PROMOBOT_MIN_DELAY_S: "2.5"
+          PROMOBOT_MAX_DELAY_S: "6"
+        run: |
+          python - <<'PY'
+          import asyncio, logging
+          logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+          from app import db
+          db.init_db()
+          from app.pipeline import run_cycle
+          stats = asyncio.run(run_cycle())
+          print("STATS:", stats)
+          PY

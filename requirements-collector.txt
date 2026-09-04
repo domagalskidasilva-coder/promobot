@@ -1,0 +1,3 @@
+# --- Só para quem coleta (sua máquina / Docker) — a Vercel não precisa ---
+-r requirements.txt
+playwright==1.49.0

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+  <link rel="stylesheet" href="/static/tw.css">
+  {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen flex flex-col">
+
+<nav class="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 sm:px-6 py-2.5
+     bg-ink-950/90 backdrop-blur border-b border-ink-700">
+  <a href="/" class="flex items-center gap-1.5 font-extrabold text-[17px]">
+    🔥 {{ app_name }}<span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" title="atualiza sozinho a cada 90s"></span>
+  </a>
+  <a href="/" class="text-sm text-mut hover:text-white transition">Ofertas</a>
+  <a href="/watchlist" class="text-sm text-mut hover:text-white transition">Watchlist</a>
+  <a href="/keywords" class="text-sm text-mut hover:text-white transition">Palavras-chave</a>
+  <a href="/status" class="text-sm text-mut hover:text-white transition">Status</a>
+  <form method="post" action="/buscar-agora" class="inline ml-auto" id="crawl-form">
+    <button type="submit" class="btn btn-sm" id="crawl-btn">↻ Buscar agora</button>
+  </form>
+  {% if auth_enabled %}<a href="/logout" class="text-sm text-mut hover:text-white transition">Sair</a>{% endif %}
+</nav>
+
+<main class="flex-1 w-full max-w-[1280px] mx-auto px-4 sm:px-6 py-5">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="w-full max-w-[1280px] mx-auto px-4 sm:px-6 pb-8 flex flex-wrap items-center gap-2.5">
+  {% if not ai_enabled %}
+    <a href="/status" class="badge badge-warn">IA desativada — configure PROMOBOT_GEMINI_API_KEY</a>
+  {% else %}
+    <span class="badge badge-ok">IA ativa</span>
+  {% endif %}
+  {% if not email_configured %}
+    <a href="/status" class="badge badge-warn">E-mail desativado</a>
+  {% else %}
+    <span class="badge badge-ok">E-mail ativo</span>
+  {% endif %}
+  <span class="text-mut text-xs" id="refresh-info"
+        title="A página atualiza sozinha. Foco em formulário pausa o reload."></span>
+</footer>
+
+<script src="/static/vendor/motion.min.js" defer></script>
+<script src="/static/app.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

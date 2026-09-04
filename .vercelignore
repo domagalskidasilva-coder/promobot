@@ -1,0 +1,11 @@
+.venv
+node_modules
+data
+tests
+.env
+vercel-env.txt
+__pycache__
+.pytest_cache
+.git
+zcode*
+*.log

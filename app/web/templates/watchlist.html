@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — {{ app_name }}{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mt-2.5">🎯 Watchlist</h1>
+<p class="text-mut text-sm">Produtos que você está de olho. O bot avisa por e-mail quando o preço cai até o alvo.</p>
+
+{% if items|length == 0 %}
+<div data-animate class="text-center py-12 px-5 my-5 rounded-2xl border border-dashed border-ink-700 bg-ink-850">
+  <div class="text-5xl mb-2">👀</div>
+  <h2 class="text-lg font-bold my-1">Nada monitorado ainda</h2>
+  <p class="text-mut text-sm">Abra qualquer oferta e clique em “Monitorar” para acompanhar o preço.</p>
+  <a class="btn mt-4" href="/">Ver ofertas</a>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5 mt-4">
+{% for it in items %}
+  <article class="card {{ 'card-hist-min' if it.hit }}" data-animate style="--stagger: {{ loop.index0 }}">
+    {% if it.hit %}<div class="ribbon">🎯 atingiu o alvo!</div>{% endif %}
+    <a href="/produto/{{ it.product.id }}" class="relative block">
+      {% if it.product.image_url %}
+        <img src="{{ it.product.image_url }}" loading="lazy" alt=""
+             class="w-full h-[130px] sm:h-[170px] object-contain bg-white block">
+      {% else %}
+        <div class="h-[130px] sm:h-[170px] grid place-items-center text-mut bg-ink-900">sem imagem</div>
+      {% endif %}
+    </a>
+    <div class="px-3 pt-2.5 pb-3.5 flex flex-col gap-1 flex-1">
+      <div class="flex gap-2.5 items-baseline">
+        <span class="market market-{{ it.product.marketplace }}">{{ it.market_label }}</span>
+        <span class="ml-auto text-mut text-[11px] timeago" data-ts="{{ it.offer.updated_at }}">{{ it.offer.updated_at | timeago }}</span>
+      </div>
+      <h3 class="text-[13.5px] leading-snug my-0.5 line-clamp-2 min-h-[2.7em]">
+        <a href="/produto/{{ it.product.id }}">{{ it.product.title[:100] }}</a>
+      </h3>
+      <div class="flex gap-2 items-baseline flex-wrap">
+        <span class="text-[19px] font-extrabold">R$ {{ "%.2f"|format(it.offer.price) }}</span>
+        {% if it.watch.target_price %}<small class="text-mut text-xs">alvo: R$ {{ "%.2f"|format(it.watch.target_price) }}</small>{% endif %}
+      </div>
+      <form method="post" action="/watchlist/{{ it.watch.id }}/delete" class="inline mt-1">
+        <button class="btn btn-danger btn-sm">parar de monitorar</button>
+      </form>
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endblock %}

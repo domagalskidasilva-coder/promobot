@@ -1,0 +1,9 @@
+services:
+  promobot:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data   # banco SQLite + perfis do navegador persistem
+    restart: unless-stopped

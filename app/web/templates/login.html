@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Entrar — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="min-h-[70vh] grid place-items-center">
+  <form method="post" action="/login" class="w-full max-w-[320px] flex flex-col gap-3 rounded-2xl
+        border border-ink-700 bg-ink-850 p-7" data-animate>
+    <h1 class="text-xl font-extrabold m-0">🔥 {{ app_name }}</h1>
+    <p class="text-mut text-sm -mt-2">Painel de promoções — acesso restrito.</p>
+    {% if error %}<p class="flag-note">{{ error }}</p>{% endif %}
+    <input type="text" name="username" placeholder="Usuário" required autofocus class="field">
+    <input type="password" name="password" placeholder="Senha" required class="field">
+    <button type="submit" class="btn mt-1">Entrar</button>
+  </form>
+</div>
+{% endblock %}

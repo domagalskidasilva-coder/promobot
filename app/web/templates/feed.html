@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Ofertas — {{ app_name }}{% endblock %}
+{% block content %}
+
+{# ---------- KPIs ---------- #}
+<section data-animate class="grid grid-cols-2 lg:grid-cols-5 gap-3 my-3.5">
+  <a href="?sort=recent" class="kpi group">
+    <b class="text-[26px] leading-none" data-countup="{{ kpis.total }}">{{ kpis.total }}</b>
+    <span class="text-mut text-xs">produtos monitorados</span>
+    <small class="text-mut/85 text-[11px] mt-1 flex gap-2">
+      {% for mp, n in kpis.by_market.items() %}
+        <span class="market market-{{ mp }}">{{ {'ml':'ML','amazon':'AMZ','shopee':'SHP'}[mp] }} {{ n }}</span>
+      {% endfor %}
+    </small>
+  </a>
+  <a href="?hot_only=true&sort=hot" class="kpi kpi-hot group">
+    <b class="text-[26px] leading-none text-accent-light" data-countup="{{ kpis.hot }}">{{ kpis.hot }}</b>
+    <span class="text-mut text-xs">ofertas quentes agora</span>
+    <small class="text-mut/85 text-[11px] mt-1">score alto · menor histórico · −25% vs média</small>
+  </a>
+  <a href="?sort=discount" class="kpi kpi-good group">
+    <b class="text-[26px] leading-none text-green-400">−{{ "%.0f"|format(kpis.best_discount) }}%</b>
+    <span class="text-mut text-xs">melhor desconto real</span>
+    <small class="text-mut/85 text-[11px] mt-1">calculado vs histórico, não vs "de/por"</small>
+  </a>
+  <a href="?sort=discount" class="kpi group">
+    <b class="text-[26px] leading-none" data-countup="{{ kpis.hist_min }}">{{ kpis.hist_min }}</b>
+    <span class="text-mut text-xs">no menor preço histórico</span>
+    <small class="text-mut/85 text-[11px] mt-1">🏅 nunca vimos mais barato</small>
+  </a>
+  <div class="kpi col-span-2 lg:col-span-1">
+    <b class="text-[26px] leading-none" data-countup="{{ kpis.avg_score or 0 }}">{{ kpis.avg_score if kpis.avg_score is not none else '—' }}</b>
+    <span class="text-mut text-xs">score médio da IA</span>
+    <small class="text-mut/85 text-[11px] mt-1">
+      {% if kpis.ai_pending %}⏳ {{ kpis.ai_pending }} na fila de análise{% else %}fila de IA vazia{% endif %}
+    </small>
+  </div>
+</section>
+
+<p data-animate class="text-mut text-[13px] mt-1.5">
+  {% if kpis.last_collect %}
+    Último ciclo: <span data-ts="{{ kpis.last_collect.created_at }}">{{ kpis.last_collect.created_at | timeago }}</span>
+    · {{ kpis.last_collect.message[:95] }}
+  {% else %}
+    Nenhum ciclo ainda — clique em “Buscar agora”.
+  {% endif %}
+</p>
+
+{# ---------- Filtros ---------- #}
+<form method="get" class="flex flex-wrap items-center gap-2 my-4" id="filters">
+  <input type="text" name="q" placeholder="🔍 Buscar produto…" value="{{ filters.q }}"
+         class="field min-w-[190px] flex-1 sm:flex-none">
+  <select name="marketplace" class="field">
+    <option value="">Todos os sites</option>
+    {% for mp, label in [('ml','Mercado Livre'),('amazon','Amazon'),('shopee','Shopee')] %}
+      <option value="{{ mp }}" {% if filters.marketplace == mp %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="category" class="field">
+    <option value="">Todas as categorias</option>
+    <option value="electronics" {% if filters.category == 'electronics' %}selected{% endif %}>Eletrônicos</option>
+    <option value="games" {% if filters.category == 'games' %}selected{% endif %}>Jogos</option>
+  </select>
+  <select name="sort" class="field">
+    {% for s, label in [('hot','🔥 Mais quentes'),('recent','🕒 Recentes'),('discount','📉 Desconto real'),('score','🤖 Score IA'),('price_asc','↑ Menor preço'),('price_desc','↓ Maior preço')] %}
+      <option value="{{ s }}" {% if filters.sort == s %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <input type="number" name="min_score" placeholder="Score mín." min="0" max="100"
+         value="{{ filters.min_score }}" class="field w-[105px]">
+  <input type="number" name="max_price" placeholder="Preço máx. R$" step="0.01" min="0"
+         value="{{ filters.max_price }}" class="field w-[140px]">
+  <label class="flex items-center gap-1.5 text-mut text-[13px] select-none">
+    <input type="checkbox" name="hot_only" value="true" {% if filters.hot_only %}checked{% endif %} class="accent-red-500"> só quentes
+  </label>
+  <button type="submit" class="btn">Filtrar</button>
+  {% if filters.q or filters.marketplace or filters.category or filters.min_score or filters.max_price or filters.hot_only %}
+    <a href="/" class="btn btn-ghost">✕ limpar</a>
+  {% endif %}
+</form>
+
+{# ---------- Resultado ---------- #}
+<div class="text-mut text-[13px] mb-3.5">
+  <b class="text-white">{{ total_rows }}</b> oferta(s){% if total_rows %} — página {{ page }} de {{ pages }}{% endif %}
+</div>
+
+{% if deals|length == 0 %}
+<div data-animate class="text-center py-12 px-5 my-5 rounded-2xl border border-dashed border-ink-700 bg-ink-850">
+  <div class="text-5xl mb-2">🕵️</div>
+  <h2 class="text-lg font-bold my-1">Nenhuma oferta encontrada</h2>
+  <p class="text-mut text-sm">Tente limpar os filtros, ou clique em “Buscar agora” para rodar um ciclo de coleta agora mesmo.</p>
+  <form method="post" action="/buscar-agora" class="mt-4"><button class="btn">↻ Buscar agora</button></form>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+{% for d in deals %}
+  <article class="card {{ 'card-hist-min' if d.analysis.is_hist_min }}" data-animate
+           style="--stagger: {{ loop.index0 }}">
+    {% if d.analysis.is_hist_min %}<div class="ribbon">🏅 menor preço histórico</div>{% endif %}
+    <a href="/produto/{{ d.product.id }}" class="relative block">
+      {% if d.product.image_url %}
+        <img src="{{ d.product.image_url }}" loading="lazy" alt=""
+             class="w-full h-[130px] sm:h-[170px] object-contain bg-white block">
+      {% else %}
+        <div class="h-[130px] sm:h-[170px] grid place-items-center text-mut bg-ink-900">sem imagem</div>
+      {% endif %}
+      {% if d.score is not none %}
+        <span class="absolute top-2 right-2 text-xs font-extrabold px-2 py-0.5 rounded-full text-white shadow-float
+              {{ 'score-high' if d.score >= 80 else 'score-mid' if d.score >= 60 else 'score-low' }}">IA {{ d.score }}</span>
+      {% endif %}
+    </a>
+    <div class="px-3 pt-2.5 pb-3.5 flex flex-col gap-1 flex-1">
+      <div class="flex gap-2.5 items-baseline">
+        <span class="market market-{{ d.product.marketplace }}">{{ d.market_label }}</span>
+        {% if d.product.category %}<span class="text-mut text-[11px]">{{ '🎮 jogos' if d.product.category == 'games' else '🔌 eletr.' }}</span>{% endif %}
+        <span class="ml-auto text-mut text-[11px] timeago" title="{{ d.offer.updated_at }}" data-ts="{{ d.offer.updated_at }}">{{ d.offer.updated_at | timeago }}</span>
+      </div>
+      <h3 class="text-[13.5px] leading-snug my-0.5 line-clamp-2 min-h-[2.7em]">
+        <a href="/produto/{{ d.product.id }}" class="hover:text-white">{{ d.product.title[:110] }}</a>
+      </h3>
+      <div class="flex gap-2 items-baseline flex-wrap">
+        <span class="text-[19px] font-extrabold">R$ {{ "%.2f"|format(d.offer.price) }}</span>
+        {% if d.offer.list_price and d.offer.list_price > d.offer.price %}
+          <s class="text-mut text-xs">R$ {{ "%.2f"|format(d.offer.list_price) }}</s>
+        {% endif %}
+        {% if d.analysis.real_discount_pct %}
+          <span class="text-green-400 font-extrabold text-sm">−{{ "%.0f"|format(d.analysis.real_discount_pct) }}%</span>
+        {% endif %}
+      </div>
+      {% if d.analysis.vs_avg30_pct and d.analysis.vs_avg30_pct > 0 %}
+        <small class="good-text text-[11.5px]">↓ {{ "%.0f"|format(d.analysis.vs_avg30_pct) }}% vs média 30 dias</small>
+      {% endif %}
+      {% if d.analysis.summary %}
+        <p class="text-mut text-xs mt-1 line-clamp-2">{{ d.analysis.summary }}</p>
+      {% endif %}
+      {% for f in d.flags %}<small class="flag-note">{{ f }}</small>{% endfor %}
+    </div>
+  </article>
+{% endfor %}
+</div>
+
+{% if pages > 1 %}
+<nav class="flex items-center justify-center gap-4 mt-7 mb-2.5" data-animate>
+  {% set qs = request.url.query %}
+  {% if page > 1 %}
+    <a class="btn btn-ghost" href="?{{ qs | replace_page(page-1) if qs else 'page=' + (page-1)|string }}">← anterior</a>
+  {% endif %}
+  <span class="text-mut text-sm">página {{ page }} / {{ pages }}</span>
+  {% if page < pages %}
+    <a class="btn btn-ghost" href="?{{ qs | replace_page(page+1) if qs else 'page=' + (page+1)|string }}">próxima →</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% endblock %}
