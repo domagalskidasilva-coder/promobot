@@ -776,23 +776,47 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
 
 
 # --------------------------------------------------------------------------
-# divulgação WhatsApp (mensagem no modelo do canal + link encurtado)
+# divulgação WhatsApp (mensagem no modelo do canal + link limpo de afiliado)
 # --------------------------------------------------------------------------
-def _shorten(url: str) -> str:
-    """TinyURL (api-create.php): 302 direto preservando query de afiliado.
+_TRACKING_PARAMS = {
+    # ML: parâmetros de sessão/campanha de busca
+    "polycard_client", "be_origin", "overlay_label", "search_layout",
+    "position", "type", "tracking_id", "sid", "reco_type", "c_id", "wh_qp",
+    # Amazon: parâmetros de rastreamento de navegação
+    "ref", "crid", "psc", "smid", "sp_csd", "csmc", "th", "pd_rd_w", "pd_rd_r",
+    "pd_rd_wg", "pd_rd_i", "keywords", "qid", "sr", "s", "dchild",
+    "content-id", "pf_rd_p", "pf_rd_r", "ufe", "isAmazonFulfilled",
+}
 
-    Falha ou excede 500 chars → devolve o link completo (afiliado incluído).
+
+def _clean_url(marketplace: str, url: str) -> str:
+    """Link oficial do marketplace sem rastreadores — nada de encurtador de
+    terceiros (tinyurl etc. passa impressão de golpe no comprador).
+
+    Preserva o parâmetro de afiliado (matt_word / tag) e o domínio visível
+    mercadolivre.com.br / amazon.com.br. No ML, itens longos são reduzidos ao
+    id: /MLB-123-titulo-completo-_JM → /MLB-123-_JM (o site resolve pelo id).
     """
-    try:
-        import httpx
+    import re
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-        r = httpx.post("https://tinyurl.com/api-create.php", data={"url": url}, timeout=8)
-        short = (r.text or "").strip()
-        if r.status_code == 200 and short.startswith("https://tinyurl.com/"):
-            return short
+    try:
+        parts = urlparse(url)
+        keep = [
+            (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k not in _TRACKING_PARAMS and not k.startswith("utm_")
+        ]
+        path = parts.path
+        if marketplace == "ml" and re.search(r"mercadol?ivre", parts.netloc or ""):
+            m = re.match(r"^/MLB-(\d+)", path)
+            if m and "/p/" not in path:
+                path = f"/MLB-{m.group(1)}-_JM"
+        elif marketplace == "amazon":
+            # /dp/ASIN/ref=sr_1_3 → /dp/ASIN (ref= é rastreador embutido no path)
+            path = re.sub(r"/ref=[^/]*", "", path)
+        return urlunparse((parts.scheme, parts.netloc, path, "", urlencode(keep), ""))
     except Exception:
-        pass
-    return url
+        return url
 
 
 @router.get("/api/share/{product_id}")
@@ -811,7 +835,7 @@ async def api_share(product_id: int, _: bool = Depends(require_login)):
         ).scalar_one_or_none()
 
     aff_url, is_aff = _aff_url(product.marketplace, product.url)
-    short_url = _shorten(aff_url)
+    share_url = _clean_url(product.marketplace, aff_url)
 
     price = offer.price if offer else None
     list_price = offer.list_price if offer else None
@@ -823,7 +847,7 @@ async def api_share(product_id: int, _: bool = Depends(require_login)):
         if list_price and list_price > price:
             inst = price / 10  # 10x sem juros aproxima o 'à vista' do marketplace
             lines.append(f"ou R$ {inst:.2f} em 10x".replace(".", ","))
-    lines.append(f"👉 {short_url}")
+    lines.append(f"👉 {share_url}")
     if offer and offer.coupon_text:
         lines.append(f"🎟️ {offer.coupon_text}")
     lines.append("🚚 Frete grátis acima de R$ 79" if product.marketplace == "ml"
@@ -832,7 +856,7 @@ async def api_share(product_id: int, _: bool = Depends(require_login)):
     lines.append("📡 Promos do Franca")
     return JSONResponse({
         "text": "\n".join(lines),
-        "url": short_url,
+        "url": share_url,
         "affiliate": is_aff,
     })
 

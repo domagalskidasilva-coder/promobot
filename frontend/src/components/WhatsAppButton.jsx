@@ -48,7 +48,7 @@ export function WhatsAppButton({ productId, label = "WhatsApp", className = "btn
       type="button"
       className={className}
       onClick={copy}
-      title="Copiar divulgação pronta para o WhatsApp (com link encurtado)"
+      title="Copiar divulgação pronta para o WhatsApp (link oficial com afiliado)"
       aria-live="polite"
     >
       {inner}
