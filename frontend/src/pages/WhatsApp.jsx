@@ -13,6 +13,8 @@ const STATE_LABEL = {
 }
 
 const FIELDS = [
+  { key: "wa_pairing_phone", label: "Número do bot (para parear)",
+    hint: "Só dígitos com DDI, ex.: 5511999998888. Gera um código de 8 dígitos para digitar no celular — mais confiável que o QR." },
   { key: "wa_send_times", label: "Horários de post",
     hint: "Separados por vírgula, fuso de Brasília. Ex.: 09:00,13:00,19:00" },
   { key: "wa_max_per_post", label: "Ofertas por post",
@@ -26,6 +28,7 @@ export function WhatsAppPage() {
   const [saved, setSaved] = useState(false)
   const [actionBusy, setActionBusy] = useState(null) // 'qr' | 'groups' | 'test' | 'state'
   const [qr, setQr] = useState(null)
+  const [pairingCode, setPairingCode] = useState(null)
   const [groups, setGroups] = useState(null)
   const [actionError, setActionError] = useState(null)
   const pollRef = useRef(null)
@@ -40,6 +43,7 @@ export function WhatsAppPage() {
   const runAction = async (action) => {
     setActionBusy(action)
     setActionError(null)
+    if (action === "qr") { setQr(null); setPairingCode(null) }
     try {
       const res = await api.waAction(action)
       if (res.pending) {
@@ -65,7 +69,11 @@ export function WhatsAppPage() {
   const applyResult = (action, res) => {
     setActionBusy(null)
     if (res?.error) { setActionError(res.error); return }
-    if (action === "qr") setQr(res.qr || null)
+    if (action === "qr") {
+      setQr(res.qr || null)
+      setPairingCode(res.pairing_code || null)
+      if (res.qr || res.pairing_code) setActionError(null)
+    }
     if (action === "groups") setGroups(res.groups || [])
     if (action === "state" || action === "qr") load()
   }
@@ -110,12 +118,13 @@ export function WhatsAppPage() {
         <section aria-label="Conexão" className="card-pad space-y-3">
           <h2 className="section-title">Conexão</h2>
           <p className="text-sm text-slate-600">
-            Escaneie o QR com o número dedicado do bot (WhatsApp → Aparelhos conectados).
-            Use um chip extra — não o seu número principal.
+            Preencha o <b>Número do bot</b> abaixo, salve, e gere o <b>código de pareamento</b> — digite
+            no celular (WhatsApp → Aparelhos conectados → Conectar aparelho → Conectar com número de telefone).
+            Prefira um chip extra — não o seu número principal.
           </p>
           <div className="flex flex-wrap gap-2">
             <button className="btn btn-sm" onClick={() => runAction("qr")} disabled={actionBusy !== null}>
-              {actionBusy === "qr" ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />} mostrar QR
+              {actionBusy === "qr" ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />} gerar QR / código
             </button>
             <button className="btn-secondary btn-sm" onClick={() => { setQr(null); runAction("state") }} disabled={actionBusy !== null}>
               <RefreshCw size={14} /> atualizar estado
@@ -128,7 +137,16 @@ export function WhatsAppPage() {
             <div className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4">
               <img src={qr.startsWith("data:") ? qr : `data:image/png;base64,${qr}`}
                    alt="QR de pareamento do WhatsApp" className="h-56 w-56" />
-              <small className="text-xs text-slate-500">expira em ~1 min — se não der tempo, clique em mostrar QR de novo</small>
+              <small className="text-xs text-slate-500">QR novo — escaneie nos próximos 30 segundos (depois clique em mostrar QR de novo)</small>
+            </div>
+          ) : null}
+          {pairingCode ? (
+            <div className="flex flex-col items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Código de pareamento</span>
+              <code className="font-mono text-3xl font-bold tracking-[0.3em] text-emerald-900">{pairingCode}</code>
+              <small className="text-center text-xs text-emerald-800">
+                No celular do bot: WhatsApp → Aparelhos conectados → Conectar aparelho → Conectar com número de telefone
+              </small>
             </div>
           ) : null}
           {groups ? (

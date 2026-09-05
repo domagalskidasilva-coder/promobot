@@ -43,6 +43,7 @@ WA_SETTINGS_KEYS = (
     "wa_group_jid",
     "wa_send_times",
     "wa_max_per_post",
+    "wa_pairing_phone",
 )
 WA_SETTINGS_DEFAULTS = {
     "wa_enabled": "false",
@@ -52,6 +53,7 @@ WA_SETTINGS_DEFAULTS = {
     "wa_group_jid": "",
     "wa_send_times": "09:00,19:00",
     "wa_max_per_post": "3",
+    "wa_pairing_phone": "",
 }
 DAILY_MESSAGE_CAP = 12
 SENT_IDS_KEEP = 400
@@ -126,43 +128,81 @@ def connection_state(s: dict | None = None) -> str:
     return "unknown"
 
 
-def get_qr(s: dict) -> dict:
-    """QR para parear o WhatsApp do bot (chamado só a partir da VPS).
-
-    A Evolution devolve 200 com {'count': 0} enquanto o Baileys prepara a
-    sessão — o QR (chave qr/base64/code) aparece alguns segundos depois, então
-    tentamos várias vezes antes de desistir.
-    """
+def _fresh_pairing(s: dict) -> dict:
+    """Reinicia a sessão para emitir um QR NOVO (o QR rotaciona a cada ~20s;
+    escanear um QR vencido dá 'falha' no app do celular)."""
+    inst = _instance(s)
     try:
-        _ev_call(s, "GET", f"/instance/connectionState/{_instance(s)}", timeout=8)
+        _ev_call(s, "GET", f"/instance/restart/{inst}", timeout=30)
+        time.sleep(6)
+    except RuntimeError:
+        pass
+    for _ in range(10):
+        time.sleep(2)
+        try:
+            data = _ev_call(s, "GET", f"/instance/connect/{inst}", timeout=20)
+        except RuntimeError as exc:
+            if "404" in str(exc):
+                continue
+            raise
+        if isinstance(data, dict):
+            nested = data.get("qrcode") if isinstance(data.get("qrcode"), dict) else {}
+            pairing = data.get("pairingCode") or nested.get("pairingCode")
+            b64 = data.get("base64") or nested.get("base64")
+            if b64 or pairing:
+                return {"base64": b64, "pairing_code": pairing}
+        if connection_state(s) == "open":
+            return {}
+    return {}
+
+
+def get_qr(s: dict, phone: str | None = None) -> dict:
+    """QR fresco + pairing code para parear o bot (chamado só a partir da VPS).
+
+    Com `phone` (só dígitos, com DDI), pede o código de 8 dígitos — método mais
+    confiável que o QR: WhatsApp → Aparelhos conectados → Conectar com número.
+    """
+    inst = _instance(s)
+    try:
+        _ev_call(s, "GET", f"/instance/connectionState/{inst}", timeout=8)
     except RuntimeError as exc:
         if "404" not in str(exc):
             raise
         _ev_call(s, "POST", "/instance/create", {
-            "instanceName": _instance(s),
+            "instanceName": inst,
             "qrcode": True,
             "integration": "WHATSAPP-BAILEYS",
         }, timeout=30)
 
-    last: dict = {}
-    for _ in range(8):
-        time.sleep(2)
+    if connection_state(s) == "open":
+        return {}
+
+    if phone:
+        # pairing code: limpa sessão atual e pede código para o número
         try:
-            data = _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
-        except RuntimeError as exc:
-            if "404" in str(exc):
-                continue  # instância reiniciando
-            raise
-        last = data if isinstance(data, dict) else {}
-        if isinstance(data, dict):
-            nested = data.get("qrcode") if isinstance(data.get("qrcode"), dict) else {}
-            qr = data.get("qr") or data.get("base64") or nested.get("base64")
-            code = data.get("code") or nested.get("code") or nested.get("pairingCode")
-            if qr or code:
-                return {"base64": qr, "code": code}
-        if connection_state(s) == "open":
-            return {}  # pareou enquanto isso
-    return last
+            _ev_call(s, "GET", f"/instance/restart/{inst}", timeout=30)
+            time.sleep(4)
+        except RuntimeError:
+            pass
+        for attempt in range(6):
+            try:
+                data = _ev_call(s, "GET", f"/instance/connect/{inst}?number={phone}",
+                                timeout=25)
+            except RuntimeError as exc:
+                if "404" in str(exc):
+                    time.sleep(3)
+                    continue
+                raise
+            pairing = (data or {}).get("pairingCode") or (data or {}).get("pairing_code")
+            if pairing:
+                return {"pairing_code": pairing, "phone": phone}
+            if connection_state(s) == "open":
+                return {}
+            time.sleep(3)
+        return {}
+
+    data = _fresh_pairing(s)
+    return data or {}
 
 
 def fetch_groups(s: dict) -> list:
@@ -351,13 +391,16 @@ def handle_wa_action(action: str, s: dict | None = None) -> dict:
         if action == "state":
             return {"state": connection_state(s)}
         if action == "qr":
-            data = get_qr(s)
-            if isinstance(data, dict) and (data.get("base64") or data.get("code")):
-                return {"qr": data.get("base64"), "pairing_code": data.get("code")}
+            data = get_qr(s, phone=s.get("wa_pairing_phone") or None)
+            if isinstance(data, dict) and data.get("base64"):
+                return {"qr": data["base64"], "pairing_code": data.get("pairing_code")}
+            if isinstance(data, dict) and data.get("pairing_code"):
+                return {"pairing_code": data["pairing_code"], "phone": data.get("phone")}
             st = connection_state(s)
             if st == "open":
                 return {"state": "open", "message": "já está pareado"}
-            return {"state": st, "error": "QR não ficou pronto a tempo — tente de novo em alguns segundos"}
+            return {"state": st,
+                    "error": "QR não ficou pronto — clique de novo (gera um QR novo na hora)"}
         if action == "groups":
             return {"groups": fetch_groups(s)}
         if action == "test":
