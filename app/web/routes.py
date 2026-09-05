@@ -794,6 +794,7 @@ WA_ACTIONS = ("state", "qr", "groups", "test")
 
 @router.get("/api/whatsapp")
 async def wa_get(_: bool = Depends(require_login)):
+    from ..main import IS_SERVERLESS
     from .. import whatsapp
 
     s = whatsapp.wa_settings()
@@ -802,7 +803,14 @@ async def wa_get(_: bool = Depends(require_login)):
         last_post = whatsapp._get_control(db_, "wa_last_post_at")
         last_result = whatsapp._get_control(db_, "wa_result")
         busy = whatsapp._get_control(db_, "wa_command")
-    state = state_cached or whatsapp.connection_state(s)
+    if IS_SERVERLESS:
+        # Vercel não alcança a Evolution (rede interna da VPS): usa o estado
+        # cacheado pelo job da VPS; sem cache ainda, pede via comando
+        state = state_cached or None
+        if state is None:
+            state = "unknown"
+    else:
+        state = whatsapp.connection_state(s)
     result = None
     if last_result:
         try:

@@ -112,6 +112,10 @@ def connection_state(s: dict | None = None) -> str:
     try:
         s = s or wa_settings()
         data = _ev_call(s, "GET", f"/instance/connectionState/{_instance(s)}", timeout=4)
+    except RuntimeError as exc:
+        if "404" in str(exc):
+            return "close"  # instância ainda não criada = desconectado
+        return "unreachable"
     except Exception:
         return "unreachable"
     if isinstance(data, dict):

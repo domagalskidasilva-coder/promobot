@@ -77,8 +77,18 @@ async def whatsapp_job() -> None:
 
     Roda a cada 5 min; next_due_slot só devolve slot com a janela (10 min)
     aberta — ou seja, dispara uma vez por horário, e horas perdidas expiram.
+    Também espelha o estado da conexão para o painel (Vercel) ler.
     """
     from . import whatsapp
+
+    s = whatsapp.wa_settings()
+    try:
+        st = whatsapp.connection_state(s)
+        with db.SessionLocal() as db_:
+            whatsapp._set_control(db_, "wa_state", st)
+            db_.commit()
+    except Exception:
+        log.exception("wa_state update falhou")
 
     if whatsapp.next_due_slot() is None:
         return
