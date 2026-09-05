@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Flame, LayoutGrid, SlidersHorizontal, Table2
 import { api } from "../lib/api"
 import { brl, timeago } from "../lib/format"
 import { DiscountBadge, EmptyState, ErrorState, LoadingState, MarketBadge, NoResults, Page, PageHeader, ProductImage, ScoreBadge, Stat, StatGrid, Field } from "../components/ui"
+import { CopyButton, shareText } from "../components/CopyButton"
 
 const TABS = [
   { id: "hot", label: "Melhores oportunidades", hint: "Selecionadas por score, desconto real e mínima histórica" },
@@ -52,12 +53,17 @@ function OfferCard({ item }) {
             </span>
           ) : null}
         </div>
-        <div className="mt-auto pt-2">
+        <div className="mt-auto grid grid-cols-[1fr_auto] gap-1.5 pt-2">
           <Link to={`/produto/${p.id}`} className="btn-secondary w-full btn-sm" aria-label={`Ver análise de ${p.title.slice(0, 60)}`}>
             Ver análise
           </Link>
+          <CopyButton
+            text={shareText(p.title, o.price, p.url)}
+            label=""
+            className="btn-secondary btn-sm !px-2.5"
+          />
           {item.affiliate ? (
-            <p className="mt-1.5 text-center text-[10.5px] text-slate-400" title="Comprar por este link apoia o Promobot com comissão — sem custo para você">
+            <p className="col-span-2 text-center text-[10.5px] text-slate-400" title="Comprar por este link apoia o Promobot com comissão — sem custo para você">
               link de afiliado
             </p>
           ) : null}

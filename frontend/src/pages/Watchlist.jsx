@@ -126,6 +126,10 @@ export function WatchlistPage() {
                       <Link to={`/produto/${it.product.id}`} className="btn-secondary flex-1 btn-sm">
                         Abrir análise
                       </Link>
+                      <CopyButton
+                        text={shareText(it.product.title, it.offer.price, it.product.url)}
+                        className="btn-secondary btn-sm"
+                      />
                       <button
                         type="button"
                         onClick={() => remove(it.watch.id, it.product.title)}

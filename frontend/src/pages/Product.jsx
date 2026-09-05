@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { CopyButton, shareText } from "../components/CopyButton"
 import { ArrowLeft, Award, ExternalLink, Eye, Loader2, Ticket, TrendingDown } from "lucide-react"
 import { api } from "../lib/api"
 import { brl, marketLabel, timeago } from "../lib/format"
@@ -147,9 +148,12 @@ export function ProductPage() {
               <span className="text-[11px] text-slate-500">aplicado no checkout</span>
             </div>
           ) : null}
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn mt-3 w-full">
-            <ExternalLink className="h-4 w-4" aria-hidden="true" /> Abrir oferta na loja
-          </a>
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-1.5">
+            <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn w-full">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" /> Abrir oferta na loja
+            </a>
+            <CopyButton text={shareText(p.title, o.price, p.url)} className="btn-secondary btn-sm" />
+          </div>
           <p className="hint">A compra é concluída no site da loja. O Promobot não vende produtos.</p>
         </section>
 
