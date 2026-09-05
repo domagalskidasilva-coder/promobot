@@ -129,11 +129,12 @@ def connection_state(s: dict | None = None) -> str:
 def get_qr(s: dict) -> dict:
     """QR para parear o WhatsApp do bot (chamado só a partir da VPS).
 
-    Após criar a instância, o Baileys demora alguns segundos para produzir o
-    QR — tenta conectar algumas vezes antes de desistir.
+    A Evolution devolve 200 com {'count': 0} enquanto o Baileys prepara a
+    sessão — o QR (chave qr/base64/code) aparece alguns segundos depois, então
+    tentamos várias vezes antes de desistir.
     """
     try:
-        return _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
+        _ev_call(s, "GET", f"/instance/connectionState/{_instance(s)}", timeout=8)
     except RuntimeError as exc:
         if "404" not in str(exc):
             raise
@@ -142,17 +143,26 @@ def get_qr(s: dict) -> dict:
             "qrcode": True,
             "integration": "WHATSAPP-BAILEYS",
         }, timeout=30)
-    # instância nova (ou sessão reiniciando): aguarda o QR aparecer
-    for _ in range(6):
-        time.sleep(3)
+
+    last: dict = {}
+    for _ in range(8):
+        time.sleep(2)
         try:
             data = _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
-            if isinstance(data, dict) and (data.get("base64") or data.get("code")):
-                return data
         except RuntimeError as exc:
-            if "404" not in str(exc):
-                raise
-    return {}
+            if "404" in str(exc):
+                continue  # instância reiniciando
+            raise
+        last = data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            nested = data.get("qrcode") if isinstance(data.get("qrcode"), dict) else {}
+            qr = data.get("qr") or data.get("base64") or nested.get("base64")
+            code = data.get("code") or nested.get("code") or nested.get("pairingCode")
+            if qr or code:
+                return {"base64": qr, "code": code}
+        if connection_state(s) == "open":
+            return {}  # pareou enquanto isso
+    return last
 
 
 def fetch_groups(s: dict) -> list:
@@ -343,8 +353,11 @@ def handle_wa_action(action: str, s: dict | None = None) -> dict:
         if action == "qr":
             data = get_qr(s)
             if isinstance(data, dict) and (data.get("base64") or data.get("code")):
-                return {"qr": data.get("base64") or data.get("code")}
-            return {"state": connection_state(s), "raw": data}
+                return {"qr": data.get("base64"), "pairing_code": data.get("code")}
+            st = connection_state(s)
+            if st == "open":
+                return {"state": "open", "message": "já está pareado"}
+            return {"state": st, "error": "QR não ficou pronto a tempo — tente de novo em alguns segundos"}
         if action == "groups":
             return {"groups": fetch_groups(s)}
         if action == "test":
