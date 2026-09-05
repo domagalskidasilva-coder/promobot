@@ -20,3 +20,50 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # --- WhatsApp automático (Evolution API + Banco + Cache) ------------------
+  # O painel Promobot fala com http://evolution-api:8080 pela rede interna do
+  # Docker — nada é exposto publicamente (a porta abaixo é só para debug na VPS).
+  evolution-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVO_DB_PASS:?defina EVO_DB_PASS no .env}
+      POSTGRES_DB: evolution
+    volumes:
+      - ./data/evolution-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  evolution-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  evolution-api:
+    image: atendai/evolution-api:v2.2.3
+    depends_on:
+      - evolution-db
+      - evolution-redis
+    environment:
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVO_DB_PASS}@evolution-db:5432/evolution?schema=public&connection_limit=20&sslmode=disable
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      CACHE_ENABLED: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      AUTHENTICATION_API_KEY: ${WA_API_KEY:?defina WA_API_KEY no .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      CONFIG_SESSION_PHONE_CLIENT_NAME: Promobot
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      LANGUAGE: pt-BR
+    ports:
+      - "127.0.0.1:8082:8080"   # apenas loopback (debug manual na VPS)
+    volumes:
+      - ./data/evolution-instances:/evolution/instances
+    restart: unless-stopped

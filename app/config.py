@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     github_token: str = ""  # PAT com escopo repo + workflow
     github_repo: str = ""   # ex.: "usuario/promobot"
 
+    # --- WhatsApp (Evolution API na VPS) ------------------------------------
+    # Mesma chave do env AUTHENTICATION_API_KEY do container evolution-api;
+    # o coletor espelha em app_settings para o painel (Vercel) conferir.
+    wa_api_key: str = ""
+
     # --- Diversos ----------------------------------------------------------
     # false no processo coletor (VPS/Docker); true em testes e no painel Vercel.
     disable_scheduler: bool = False

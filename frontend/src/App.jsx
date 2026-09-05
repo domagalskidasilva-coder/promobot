@@ -7,6 +7,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  MessageCircle,
   RefreshCw,
   Search,
   Sparkles,
@@ -30,6 +31,7 @@ import { InsightsPage } from "./pages/Insights"
 import { StoresPage } from "./pages/Stores"
 import { CouponsPage } from "./pages/Coupons"
 import { AffiliatePage } from "./pages/Affiliate"
+import { WhatsAppPage } from "./pages/WhatsApp"
 
 const NAV = [
   { to: "/", label: "Ofertas", icon: Flame, end: true },
@@ -38,6 +40,7 @@ const NAV = [
   { to: "/insights", label: "Insights", icon: Sparkles, end: false },
   { to: "/lojas", label: "Lojas", icon: StoreIcon, end: false },
   { to: "/cupons", label: "Cupons", icon: Ticket, end: false },
+  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, end: false },
   { to: "/afiliados", label: "Afiliados", icon: HandCoins, end: false },
   { to: "/status", label: "Status", icon: ChartNoAxesColumn, end: false },
 ]
@@ -403,6 +406,7 @@ export default function App() {
           <Route path="insights" element={<InsightsPage />} />
           <Route path="lojas" element={<StoresPage />} />
           <Route path="cupons" element={<CouponsPage />} />
+          <Route path="whatsapp" element={<WhatsAppPage />} />
           <Route path="afiliados" element={<AffiliatePage />} />
           <Route path="status" element={<StatusPage />} />
         </Route>

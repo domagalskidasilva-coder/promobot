@@ -35,7 +35,6 @@ router = APIRouter()
 
 MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon"}
 
-
 def require_login(request: Request):
     settings = get_settings()
     if settings.auth_enabled and request.session.get("user") != settings.auth_user:
@@ -776,89 +775,101 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
 
 
 # --------------------------------------------------------------------------
-# divulgação WhatsApp (mensagem no modelo do canal + link limpo de afiliado)
+# divulgação WhatsApp (mensagem no modelo do canal) + Evolution API
 # --------------------------------------------------------------------------
-_TRACKING_PARAMS = {
-    # ML: parâmetros de sessão/campanha de busca
-    "polycard_client", "be_origin", "overlay_label", "search_layout",
-    "position", "type", "tracking_id", "sid", "reco_type", "c_id", "wh_qp",
-    # Amazon: parâmetros de rastreamento de navegação
-    "ref", "crid", "psc", "smid", "sp_csd", "csmc", "th", "pd_rd_w", "pd_rd_r",
-    "pd_rd_wg", "pd_rd_i", "keywords", "qid", "sr", "s", "dchild",
-    "content-id", "pf_rd_p", "pf_rd_r", "ufe", "isAmazonFulfilled",
-}
-
-
-def _clean_url(marketplace: str, url: str) -> str:
-    """Link oficial do marketplace sem rastreadores — nada de encurtador de
-    terceiros (tinyurl etc. passa impressão de golpe no comprador).
-
-    Preserva o parâmetro de afiliado (matt_word / tag) e o domínio visível
-    mercadolivre.com.br / amazon.com.br. No ML, itens longos são reduzidos ao
-    id: /MLB-123-titulo-completo-_JM → /MLB-123-_JM (o site resolve pelo id).
-    """
-    import re
-    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
-    try:
-        parts = urlparse(url)
-        keep = [
-            (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-            if k not in _TRACKING_PARAMS and not k.startswith("utm_")
-        ]
-        path = parts.path
-        if marketplace == "ml" and re.search(r"mercadol?ivre", parts.netloc or ""):
-            m = re.match(r"^/MLB-(\d+)", path)
-            if m and "/p/" not in path:
-                path = f"/MLB-{m.group(1)}-_JM"
-        elif marketplace == "amazon":
-            # /dp/ASIN/ref=sr_1_3 → /dp/ASIN (ref= é rastreador embutido no path)
-            path = re.sub(r"/ref=[^/]*", "", path)
-        return urlunparse((parts.scheme, parts.netloc, path, "", urlencode(keep), ""))
-    except Exception:
-        return url
-
-
 @router.get("/api/share/{product_id}")
 async def api_share(product_id: int, _: bool = Depends(require_login)):
-    """Mensagem pronta para o WhatsApp no modelo do canal PROMOS DO FRANCA."""
+    """Mensagem pronta para o WhatsApp no modelo do canal PROMO$ DO FRANÇA."""
+    from ..whatsapp import build_share_text
+
+    try:
+        text, url, is_aff = build_share_text(product_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return JSONResponse({"text": text, "url": url, "affiliate": is_aff})
+
+
+WA_ACTIONS = ("state", "qr", "groups", "test")
+
+
+@router.get("/api/whatsapp")
+async def wa_get(_: bool = Depends(require_login)):
+    from .. import whatsapp
+
+    s = whatsapp.wa_settings()
     with db.SessionLocal() as db_:
-        product = db_.get(Product, product_id)
-        if product is None:
-            raise HTTPException(status_code=404, detail="produto não encontrado")
-        offer = db_.execute(
-            select(Offer).where(Offer.product_id == product_id)
-        ).scalar_one_or_none()
-        analysis = db_.execute(
-            select(Analysis).join(Offer, Analysis.offer_id == Offer.id)
-            .where(Offer.product_id == product_id)
-        ).scalar_one_or_none()
-
-    aff_url, is_aff = _aff_url(product.marketplace, product.url)
-    share_url = _clean_url(product.marketplace, aff_url)
-
-    price = offer.price if offer else None
-    list_price = offer.list_price if offer else None
-    lines = [f"[{MARKET_LABEL.get(product.marketplace, product.marketplace)}] {product.title}"]
-    if analysis and analysis.real_discount_pct:
-        lines.append(f"⚠️ {analysis.real_discount_pct:.0f}% OFF")
-    if price is not None:
-        lines.append(f"💰 R$ {price:.2f}".replace(".", ","))
-        if list_price and list_price > price:
-            inst = price / 10  # 10x sem juros aproxima o 'à vista' do marketplace
-            lines.append(f"ou R$ {inst:.2f} em 10x".replace(".", ","))
-    lines.append(f"👉 {share_url}")
-    if offer and offer.coupon_text:
-        lines.append(f"🎟️ {offer.coupon_text}")
-    lines.append("🚚 Frete grátis acima de R$ 79" if product.marketplace == "ml"
-                 else "🚚 Frete grátis no Amazon Prime")
-    lines.append("")
-    lines.append("PROMO$ DO FRANÇA 🇫🇷🤑 - GAMER 🎮")
-    lines.append("https://tinyurl.com/promosdofranca")
+        state_cached = whatsapp._get_control(db_, "wa_state")
+        last_post = whatsapp._get_control(db_, "wa_last_post_at")
+        last_result = whatsapp._get_control(db_, "wa_result")
+        busy = whatsapp._get_control(db_, "wa_command")
+    state = state_cached or whatsapp.connection_state(s)
+    result = None
+    if last_result:
+        try:
+            result = json.loads(last_result)
+        except Exception:
+            result = None
     return JSONResponse({
-        "text": "\n".join(lines),
-        "url": share_url,
-        "affiliate": is_aff,
+        "settings": {k: s[k] for k in whatsapp.WA_SETTINGS_KEYS},
+        "state": state,
+        "last_post": last_post or None,
+        "posts_today": whatsapp._posts_today(),
+        "daily_cap": whatsapp.DAILY_MESSAGE_CAP,
+        "last_result": result,
+        "busy": busy or None,
     })
+
+
+@router.post("/api/whatsapp")
+async def wa_save(body: dict, _: bool = Depends(require_login)):
+    from .. import whatsapp
+
+    # a chave da Evolution só é definida por env (WA_API_KEY na VPS)
+    body.pop("wa_evolution_key", None)
+    whatsapp.save_wa_settings(body)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/whatsapp/action")
+async def wa_action(body: dict, _: bool = Depends(require_login)):
+    from ..main import IS_SERVERLESS
+    from .. import whatsapp
+
+    action = body.get("action")
+    if action not in WA_ACTIONS:
+        raise HTTPException(status_code=422, detail="ação inválida")
+    if IS_SERVERLESS:
+        # Vercel não alcança a Evolution (rede interna da VPS): grava comando,
+        # o watcher do coletor executa e devolve em wa_result
+        ts = str(int(utcnow().timestamp()))
+        with db.SessionLocal() as db_:
+            whatsapp._set_control(db_, "wa_command", f"{action}:{ts}")
+            whatsapp._set_control(db_, "wa_result", "")
+            db_.commit()
+        return JSONResponse({"pending": True, "ts": ts})
+    result = whatsapp.handle_wa_action(action)
+    with db.SessionLocal() as db_:
+        whatsapp._set_control(db_, "wa_result",
+                              json.dumps({"ts": "direct", **result}))
+        db_.commit()
+    return JSONResponse(result)
+
+
+@router.get("/api/whatsapp/result")
+async def wa_result(ts: str = "", _: bool = Depends(require_login)):
+    from .. import whatsapp
+
+    with db.SessionLocal() as db_:
+        raw = whatsapp._get_control(db_, "wa_result")
+        busy = whatsapp._get_control(db_, "wa_command")
+    if not raw:
+        return JSONResponse({"pending": True, "busy": busy or None})
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return JSONResponse({"pending": True, "busy": busy or None})
+    if ts and str(data.get("ts")) != ts:
+        return JSONResponse({"pending": True, "busy": busy or None})
+    return JSONResponse(data)
 
 

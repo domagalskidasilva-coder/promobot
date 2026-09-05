@@ -72,6 +72,21 @@ async def coupons_job() -> None:
         log.info("Coletor ocupado — caça de cupons ignorada.")
 
 
+async def whatsapp_job() -> None:
+    """Post no grupo do WhatsApp quando chega um dos horários configurados.
+
+    Roda a cada 5 min; next_due_slot só devolve slot com a janela (10 min)
+    aberta — ou seja, dispara uma vez por horário, e horas perdidas expiram.
+    """
+    from . import whatsapp
+
+    if whatsapp.next_due_slot() is None:
+        return
+    ok = collector.submit(whatsapp.post_scheduled)
+    if not ok:
+        log.info("Coletor ocupado — post do WhatsApp adiado.")
+
+
 async def digest_job() -> None:
     try:
         with db.SessionLocal() as db_:
@@ -79,6 +94,34 @@ async def digest_job() -> None:
         db.log_event("notify", f"Digest diário enviado ({n} ofertas).")
     except Exception:
         log.exception("Digest diário falhou")
+
+
+async def watch_wa_commands() -> None:
+    """Ponte painel(Vercel)→VPS: executa ações da Evolution API (QR, grupos,
+    teste) que só são alcançáveis na rede interna da VPS."""
+    import json
+
+    from . import whatsapp
+
+    while True:
+        try:
+            with db.SessionLocal() as db_:
+                cmd = whatsapp._get_control(db_, "wa_command")
+            if cmd and cmd.startswith(("state:", "qr:", "groups:", "test:")):
+                action = cmd.split(":", 1)[0]
+                ts = cmd.split(":", 1)[1]
+                with db.SessionLocal() as db_:
+                    whatsapp._set_control(db_, "wa_command", "busy")
+                    db_.commit()
+                result = whatsapp.handle_wa_action(action)
+                result["ts"] = ts
+                with db.SessionLocal() as db_:
+                    whatsapp._set_control(db_, "wa_result", json.dumps(result))
+                    whatsapp._set_control(db_, "wa_command", "")
+                    db_.commit()
+        except Exception:
+            log.exception("watch_wa_commands falhou")
+        await asyncio.sleep(5)
 
 
 def configure_jobs(target: AsyncIOScheduler, *, settings: Settings | None = None) -> None:
@@ -115,6 +158,14 @@ def configure_jobs(target: AsyncIOScheduler, *, settings: Settings | None = None
         coupons_job,
         IntervalTrigger(hours=2, jitter=120),
         id="coupons",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+    target.add_job(
+        whatsapp_job,
+        IntervalTrigger(minutes=5),
+        id="whatsapp",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

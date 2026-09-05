@@ -19,6 +19,7 @@ from .scheduler import (
     setup as setup_scheduler,
     shutdown as shutdown_scheduler,
     watch_collect_requests,
+    watch_wa_commands,
 )
 from .web.routes import router
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     db.init_db()
     collect_request_watcher: asyncio.Task[None] | None = None
+    wa_command_watcher: asyncio.Task[None] | None = None
     if not settings.disable_scheduler:
         # limpa flag de coleta pendente de um processo anterior (estado órfão)
         from .models import AppControl
@@ -46,10 +48,16 @@ async def lifespan(app: FastAPI):
             if row and row.value:
                 row.value = ""
                 db_.commit()
+        from . import whatsapp
+
+        whatsapp.sync_api_key_from_env()
         collector.start()
         setup_scheduler()
         collect_request_watcher = asyncio.create_task(
             watch_collect_requests(), name="promobot-collect-request-watcher"
+        )
+        wa_command_watcher = asyncio.create_task(
+            watch_wa_commands(), name="promobot-wa-command-watcher"
         )
         log = logging.getLogger("promobot.main")
         log.info("Coletor e scheduler habilitados neste processo.")
@@ -59,10 +67,11 @@ async def lifespan(app: FastAPI):
         )
     yield
     if not settings.disable_scheduler:
-        if collect_request_watcher:
-            collect_request_watcher.cancel()
-            with suppress(asyncio.CancelledError):
-                await collect_request_watcher
+        for task in (collect_request_watcher, wa_command_watcher):
+            if task:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
         await shutdown_scheduler()
 
 
