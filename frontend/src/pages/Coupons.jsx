@@ -4,7 +4,7 @@ import { Link } from "react-router-dom"
 import { Ticket, Copy, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "../lib/api"
 import { timeago } from "../lib/format"
-import { EmptyState, LoadingState, Page, PageHeader } from "../components/ui"
+import { EmptyState, LoadingState, MarketBadge, Page, PageHeader } from "../components/ui"
 
 const MKT_COLORS = { ml: "#b45309", amazon: "#1d4ed8" }
 
@@ -59,10 +59,11 @@ export function CouponsPage() {
   const [items, setItems] = useState(null)
   const [filter, setFilter] = useState("")
 
-  useEffect(() => { api.coupons().then(setItems).catch(() => setItems([])) }, [])
+  useEffect(() => { api.coupons().then((d) => setItems(Array.isArray(d) ? d : [])).catch(() => setItems([])) }, [])
   if (items === null) return <LoadingState />
 
-  const filtered = filter ? items.filter((c) => c.marketplace === filter) : items
+  const list = Array.isArray(items) ? items : []
+  const filtered = filter ? list.filter((c) => c.marketplace === filter) : list
 
   return (
     <Page>

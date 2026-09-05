@@ -330,6 +330,29 @@ function Shell({ onLogout, collector }) {
   )
 }
 
+import { Component } from "react"
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="mx-auto max-w-2xl p-8">
+          <h1 className="text-lg font-bold text-red-700">Erro na página</h1>
+          <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-red-50 p-4 text-xs text-red-900">
+            {String(this.state.error?.stack || this.state.error)}
+          </pre>
+          <button className="btn mt-3" onClick={() => { this.setState({ error: null }); window.location.href = "/" }}>
+            voltar ao início
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   const [auth, setAuth] = useState(null)
   const collector = useCollector()
