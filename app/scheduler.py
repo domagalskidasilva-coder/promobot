@@ -83,7 +83,7 @@ async def whatsapp_job() -> None:
 
     s = whatsapp.wa_settings()
     try:
-        st = whatsapp.connection_state(s)
+        st = await asyncio.to_thread(whatsapp.connection_state, s)
         with db.SessionLocal() as db_:
             whatsapp._set_control(db_, "wa_state", st)
             db_.commit()
@@ -123,7 +123,8 @@ async def watch_wa_commands() -> None:
                 with db.SessionLocal() as db_:
                     whatsapp._set_control(db_, "wa_command", "busy")
                     db_.commit()
-                result = whatsapp.handle_wa_action(action)
+                # chamadas HTTP sync (QR pode levar ~15s): fora do event loop
+                result = await asyncio.to_thread(whatsapp.handle_wa_action, action)
                 result["ts"] = ts
                 with db.SessionLocal() as db_:
                     whatsapp._set_control(db_, "wa_result", json.dumps(result))
