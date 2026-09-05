@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Flame, LayoutGrid, SlidersHorizontal, Table2, Clock3 } from "lucide-react"
 import { api } from "../lib/api"
@@ -72,6 +72,33 @@ function OfferCard({ item }) {
         </div>
       </div>
     </article>
+  )
+}
+
+function Pagination({ page, pages, onGo, loading, ariaLabel }) {
+  if (!pages || pages <= 1) return null
+  return (
+    <nav aria-label={ariaLabel} className="flex items-center justify-center gap-3 py-2">
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={page <= 1 || loading}
+        onClick={() => onGo(page - 1)}
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior
+      </button>
+      <span className="text-sm tabular-nums text-slate-600" aria-current="page">
+        Página {page} de {pages}
+      </span>
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={page >= pages || loading}
+        onClick={() => onGo(page + 1)}
+      >
+        Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </nav>
   )
 }
 
@@ -197,6 +224,7 @@ export function FeedPage() {
   const [loading, setLoading] = useState(true)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [view, setView] = useState(() => localStorage.getItem("pb_view") || "grid")
+  const listTopRef = useRef(null)
 
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
   const filters = useMemo(
@@ -257,6 +285,17 @@ export function FeedPage() {
     } catch {
       /* armazenamento indisponível */
     }
+  }
+
+  const goToPage = (n) => {
+    if (n < 1 || (data && n > data.pages)) return
+    const next = new URLSearchParams(searchParams)
+    next.set("page", String(n))
+    setSearchParams(next)
+    // volta ao topo da lista de produtos (abaixo dos controles)
+    requestAnimationFrame(() => {
+      listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
   }
 
   const items = data?.items || []
@@ -358,6 +397,12 @@ export function FeedPage() {
         {loading ? <span className="text-xs text-slate-500">Atualizando lista…</span> : null}
       </div>
 
+      <div ref={listTopRef} className="scroll-mt-3">
+        {data && data.pages > 1 ? (
+          <Pagination page={data.page} pages={data.pages} onGo={goToPage} loading={loading} ariaLabel="Paginação (topo da lista)" />
+        ) : null}
+      </div>
+
       {loading && !data ? (
         <LoadingState label="Buscando ofertas…" />
       ) : error ? (
@@ -423,37 +468,7 @@ export function FeedPage() {
         </div>
       )}
 
-      {data && data.pages > 1 ? (
-        <nav aria-label="Paginação" className="flex items-center justify-center gap-3 py-2">
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            disabled={page <= 1}
-            onClick={() => {
-              const n = new URLSearchParams(searchParams)
-              n.set("page", String(page - 1))
-              setSearchParams(n)
-            }}
-          >
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior
-          </button>
-          <span className="text-sm tabular-nums text-slate-600" aria-current="page">
-            Página {data.page} de {data.pages}
-          </span>
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            disabled={page >= data.pages}
-            onClick={() => {
-              const n = new URLSearchParams(searchParams)
-              n.set("page", String(page + 1))
-              setSearchParams(n)
-            }}
-          >
-            Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </nav>
-      ) : null}
+      <Pagination page={data?.page ?? 1} pages={data?.pages ?? 0} onGo={goToPage} loading={loading} ariaLabel="Paginação (fim da lista)" />
 
       {items.length > 0 && !activeTab ? (
         <EmptyState
