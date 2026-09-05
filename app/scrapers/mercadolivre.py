@@ -41,6 +41,13 @@ def _extract_id(url: str) -> str | None:
 
 def _classify(title: str, category_id: str | None = None) -> str | None:
     t = title.lower()
+    # fora de escopo (o usuário não quer): roupas, alimentos, suplementos
+    fora_words = ("roupa", "camiseta", "camisa", "calça", "short", "vestido",
+                  "biquíni", "cueca", "meia", "tênis ", "chinelo", "creatina",
+                  "whey", "suplemento", "vitamina", "alimento", "chocolate",
+                  "albumina", "colágeno", "turbina", "perfume", "creme")
+    if any(w in t for w in fora_words):
+        return "fora"
     game_words = ("jogo ", "game ", "ps5", "playstation", "xbox", "nintendo", "switch", "steam")
     elec_words = ("notebook", "celular", "iphone", "smartphone", "fone", "headphone", "monitor",
                   "rtx", "gtx", "placa de vídeo", "ssd", "memória ram", "notebook gamer",

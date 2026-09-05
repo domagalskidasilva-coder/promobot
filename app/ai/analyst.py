@@ -29,6 +29,10 @@ Regras de pontuação (score):
 - 40-69: neutra — preço comum ou sinais mistos
 - 1-39: ruim — provável desconto falso, preço inflado antes do "desconto", ou produto errado
 
+IMPORTANTE — ESCOPO: o Promobot é só de ELETRÔNICOS e JOGOS. Roupas, calçados,
+alimentos, suplementos, vitaminas e cosméticos NÃO interessam: marque
+"fora_do_escopo" e dê score baixo (máx. 10), mesmo que o desconto seja alto.
+
 Flags possíveis (use apenas as que se aplicam):
 - "desconto_falso": desconto anunciado parece ancorado em preço inflado
 - "titulo_enganoso": título exagerado, marca genérica se passando por marca famosa

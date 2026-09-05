@@ -76,6 +76,8 @@ def upsert_offers(db_, raw_offers: list[OfferRaw]) -> tuple[int, int, int]:
     for raw in raw_offers:
         if not raw.title or raw.price <= 0:
             continue
+        if raw.category == "fora":
+            continue  # roupa/suplemento/alimento: fora do escopo do Promobot
         key = (raw.marketplace, raw.external_id)
         if key in seen_in_batch:
             continue  # mantém a primeira ocorrência (mais relevante)
@@ -309,10 +311,12 @@ def expire_products(max_cycles_without_deal: int = 6) -> dict:
             FROM (
                 SELECT o.product_id FROM offers o
                 LEFT JOIN offers_analysis a ON a.offer_id = o.id
-                WHERE coalesce(a.real_discount_pct, 0) >= 5
+                LEFT JOIN products p ON p.id = o.product_id
+                WHERE (coalesce(a.real_discount_pct, 0) >= 5
                    OR a.is_hist_min
                    OR coalesce(a.vs_avg30_pct, 0) >= 25
-                   OR o.coupon_text IS NOT NULL
+                   OR o.coupon_text IS NOT NULL)
+                   AND coalesce(p.category, 'ok') <> 'fora'
             ) t
             WHERE ac.key = 'no_deal:' || t.product_id AND ac.value <> '0'
             """
@@ -330,7 +334,7 @@ def expire_products(max_cycles_without_deal: int = 6) -> dict:
                 OR a.is_hist_min
                 OR coalesce(a.vs_avg30_pct, 0) >= 25
                 OR o.coupon_text IS NOT NULL
-            )
+            ) OR p.category = 'fora'
             ON CONFLICT (key) DO UPDATE
               SET value = ((coalesce(app_control.value, '0')::int) + 1)::text,
                   updated_at = now()

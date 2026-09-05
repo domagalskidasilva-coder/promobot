@@ -72,6 +72,12 @@ def _filtered_stmt(marketplace: str | None, q: str | None, category: str | None,
         select(Offer, Product, Analysis)
         .join(Product, Offer.product_id == Product.id)
         .join(Analysis, Analysis.offer_id == Offer.id)
+        .where(
+            # regra de qualidade: só oferta com valor promocional comprovado
+            (func.coalesce(Analysis.real_discount_pct, 0) >= 5)
+            | Analysis.is_hist_min.is_(True)
+            | Offer.coupon_text.is_not(None)
+        )
         .order_by(order, Offer.updated_at.desc())
     )
     if marketplace:

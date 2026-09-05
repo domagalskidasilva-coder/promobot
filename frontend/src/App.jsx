@@ -10,7 +10,10 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Store as StoreIcon,
   Tag,
+  Ticket,
+  HandCoins,
   X,
   Zap,
 } from "lucide-react"
@@ -33,6 +36,9 @@ const NAV = [
   { to: "/watchlist", label: "Monitoradas", icon: Eye, end: false },
   { to: "/keywords", label: "Palavras-chave", icon: Tag, end: false },
   { to: "/insights", label: "Insights", icon: Sparkles, end: false },
+  { to: "/lojas", label: "Lojas", icon: StoreIcon, end: false },
+  { to: "/cupons", label: "Cupons", icon: Ticket, end: false },
+  { to: "/afiliados", label: "Afiliados", icon: HandCoins, end: false },
   { to: "/status", label: "Status", icon: ChartNoAxesColumn, end: false },
 ]
 
@@ -372,6 +378,9 @@ export default function App() {
           <Route path="watchlist" element={<WatchlistPage />} />
           <Route path="keywords" element={<KeywordsPage />} />
           <Route path="insights" element={<InsightsPage />} />
+          <Route path="lojas" element={<StoresPage />} />
+          <Route path="cupons" element={<CouponsPage />} />
+          <Route path="afiliados" element={<AffiliatePage />} />
           <Route path="status" element={<StatusPage />} />
         </Route>
       ) : (
