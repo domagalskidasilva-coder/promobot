@@ -24,6 +24,7 @@ export const api = {
     return req(`/api/offers?${qs}`)
   },
   product: (id) => req(`/api/product/${id}`),
+  share: (id) => req(`/api/share/${id}`),
   insights: () => req("/api/insights"),
   coupons: () => req("/api/coupons"),
   affiliateConfig: () => req("/api/affiliate"),

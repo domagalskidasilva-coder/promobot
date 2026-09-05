@@ -775,188 +775,65 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
     return JSONResponse({"ok": True})
 
 
-@router.get("/healthz")
-
-@router.get("/healthz")
-async def healthz():
-    """Health-check público (pingador de uptime não tem sessão)."""
-    from ..main import IS_SERVERLESS
-
-    return JSONResponse({
-        "ok": True,
-        "serverless": IS_SERVERLESS,
-        "collector_running": collector.running,
-        "ts": utcnow().isoformat(),
-    })
-
-
 # --------------------------------------------------------------------------
-# insights (página de analytics) + sparklines
+# divulgação WhatsApp (mensagem no modelo do canal + link encurtado)
 # --------------------------------------------------------------------------
-@router.get("/api/insights")
-async def api_insights(_: bool = Depends(require_login)):
-    import re
+def _shorten(url: str) -> str:
+    """TinyURL (api-create.php): 302 direto preservando query de afiliado.
 
-    with db.SessionLocal() as db_:
-        by_market = [
-            {"label": MARKET_LABEL.get(k, k), "value": v}
-            for k, v in db_.execute(
-                select(Product.marketplace, func.count()).group_by(Product.marketplace)
-            ).all()
-        ]
-        by_category = [
-            {"label": ({"games": "Jogos", "electronics": "Eletrônicos"}.get(k) or "Outros"), "value": v}
-            for k, v in db_.execute(
-                select(Product.category, func.count()).group_by(Product.category)
-            ).all()
-        ]
-        avg_price_cat = [
-            {"label": ({"games": "Jogos", "electronics": "Eletrônicos"}.get(k) or "Outros"),
-             "avg": round(float(a or 0), 2)}
-            for k, a in db_.execute(
-                select(Product.category, func.avg(Offer.price))
-                .join(Offer, Offer.product_id == Product.id)
-                .group_by(Product.category)
-            ).all()
-        ]
-        novos_7d = [
-            {"d": str(d), "n": n}
-            for d, n in db_.execute(text(
-                "SELECT date(first_seen_at) AS d, count(*) FROM products "
-                "WHERE first_seen_at >= now() - interval '7 days' GROUP BY 1 ORDER BY 1"
-            )).all()
-        ]
-        score_hist = [
-            {"bucket": int(b), "n": n}
-            for b, n in db_.execute(text(
-                "SELECT floor(score/10)*10 AS b, count(*) FROM offers_analysis "
-                "WHERE score IS NOT NULL GROUP BY 1 ORDER BY 1"
-            )).all()
-        ]
-
-        stmt = _filtered_stmt(None, None, None, None, None, False, "discount").limit(10)
-        top_discounts = []
-        for o, p, a in db_.execute(stmt).all():
-            top_discounts.append({
-                "product": {"id": p.id, "title": p.title[:80], "marketplace": p.marketplace},
-                "price": o.price, "list_price": o.list_price,
-                "real_discount_pct": a.real_discount_pct,
-                "market_label": MARKET_LABEL.get(p.marketplace, p.marketplace),
-            })
-
-        drops_rows = db_.execute(text(
-            """
-            WITH recent AS (
-                SELECT product_id, price,
-                       row_number() OVER (PARTITION BY product_id ORDER BY captured_at DESC) AS rn,
-                       max(price) OVER (PARTITION BY product_id) AS max_recent
-                FROM price_history
-                WHERE captured_at >= now() - interval '48 hours'
-            )
-            SELECT r.product_id, p.title, p.marketplace, r.price, r.max_recent
-            FROM recent r
-            JOIN products p ON p.id = r.product_id
-            WHERE r.rn = 1 AND r.max_recent > r.price * 1.05
-            ORDER BY (r.max_recent - r.price) / r.max_recent DESC
-            LIMIT 10
-            """
-        )).all()
-        drops = [
-            {"id": pid, "title": title[:80], "marketplace": mp,
-             "price": price, "was": was,
-             "drop_pct": round((1 - price / was) * 100, 1),
-             "market_label": MARKET_LABEL.get(mp, mp)}
-            for pid, title, mp, price, was in drops_rows
-        ]
-
-        cycles = []
-        evs = db_.execute(
-            select(EventLog).where(EventLog.scope == "pipeline")
-            .order_by(EventLog.created_at.desc()).limit(24)
-        ).scalars().all()
-        for e in reversed(evs):
-            m = re.search(r"'collected': (\d+), 'new': (\d+)", e.message)
-            if m:
-                cycles.append({"ts": e.created_at.isoformat(),
-                               "collected": int(m.group(1)), "new": int(m.group(2))})
-
-        return JSONResponse({
-            "by_market": by_market, "by_category": by_category,
-            "avg_price_cat": avg_price_cat, "novos_7d": novos_7d,
-            "score_hist": score_hist, "top_discounts": top_discounts,
-            "drops_48h": drops, "cycles": cycles,
-        })
-
-
-@router.get("/api/sparklines")
-async def api_sparklines(ids: str, _: bool = Depends(require_login)):
-    """Últimos pontos de preço para mini-gráficos dos cards. ids=1,2,3..."""
-    id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()][:48]
-    if not id_list:
-        return JSONResponse({})
-    with db.SessionLocal() as db_:
-        rows = db_.execute(
-            select(PriceHistory.product_id, PriceHistory.price, PriceHistory.captured_at)
-            .where(PriceHistory.product_id.in_(id_list))
-            .order_by(PriceHistory.product_id, PriceHistory.captured_at)
-        ).all()
-    out: dict[str, list[float]] = {}
-    for pid, price, _ts in rows:
-        out.setdefault(str(pid), []).append(price)
-    return JSONResponse({k: v[-24:] for k, v in out.items()})
-
-
-AFFILIATE_KEYS = ("affiliate_amazon_tag", "affiliate_ml_matt_word",
-                  "affiliate_ml_matt_tool", "affiliate_shopee_template")
-
-
-@router.get("/api/affiliate")
-async def api_affiliate_get(_: bool = Depends(require_login)):
-    s = get_settings()
-    return JSONResponse({
-        "affiliate_amazon_tag": s.affiliate_amazon_tag,
-        "affiliate_ml_matt_word": s.affiliate_ml_matt_word,
-        "affiliate_ml_matt_tool": s.affiliate_ml_matt_tool,
-        "affiliate_shopee_template": s.affiliate_shopee_template,
-    })
-
-
-@router.post("/api/affiliate")
-async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(require_login)):
-    """Salva os IDs de afiliado no arquivo .env da máquina onde o coletor roda.
-
-    Na VPS (Docker no host), escreve em /opt/promobot/.env e reinicia o
-    container para o processo reler. Na Vercel, os valores são somente leitura
-    (configurar nas Environment Variables da Vercel).
+    Falha ou excede 500 chars → devolve o link completo (afiliado incluído).
     """
-    from pathlib import Path
+    try:
+        import httpx
 
-    # dentro do container o .env fica em /app/.env; no host, /opt/promobot/.env
-    env_path = next((Path(p) for p in ("/app/.env", "/opt/promobot/.env")
-                     if Path(p).is_file()), None)
-    if env_path is None:
-        raise HTTPException(status_code=400,
-                            detail="arquivo .env não encontrado nesta máquina (configure via Environment Variables)")
+        r = httpx.post("https://tinyurl.com/api-create.php", data={"url": url}, timeout=8)
+        short = (r.text or "").strip()
+        if r.status_code == 200 and short.startswith("https://tinyurl.com/"):
+            return short
+    except Exception:
+        pass
+    return url
 
-    allowed = {k: str(body.get(k, "")).strip() for k in AFFILIATE_KEYS if k in body}
-    lines = env_path.read_text().splitlines()
-    for k, v in allowed.items():
-        if v and "'" in v:
-            raise HTTPException(status_code=422, detail=f"valor inválido em {k}")
-        replaced = False
-        for i, line in enumerate(lines):
-            if line.startswith(f"{k}=") or line.startswith(f"# {k}="):
-                lines[i] = f"{k}={v}"
-                replaced = True
-                break
-        if not replaced:
-            lines.append(f"{k}={v}")
-    env_path.write_text("\n".join(lines) + "\n")
 
-    # reler as variáveis exige novo processo: no container, uvicorn é o PID 1
-    # e o restart policy religa tudo em seguida
-    import os
-    import signal
+@router.get("/api/share/{product_id}")
+async def api_share(product_id: int, _: bool = Depends(require_login)):
+    """Mensagem pronta para o WhatsApp no modelo do canal PROMOS DO FRANCA."""
+    with db.SessionLocal() as db_:
+        product = db_.get(Product, product_id)
+        if product is None:
+            raise HTTPException(status_code=404, detail="produto não encontrado")
+        offer = db_.execute(
+            select(Offer).where(Offer.product_id == product_id)
+        ).scalar_one_or_none()
+        analysis = db_.execute(
+            select(Analysis).join(Offer, Analysis.offer_id == Offer.id)
+            .where(Offer.product_id == product_id)
+        ).scalar_one_or_none()
 
-    os.kill(1, signal.SIGTERM)
-    return JSONResponse({"ok": True, "restarted": True})
+    aff_url, is_aff = _aff_url(product.marketplace, product.url)
+    short_url = _shorten(aff_url)
+
+    price = offer.price if offer else None
+    list_price = offer.list_price if offer else None
+    lines = [f"[{MARKET_LABEL.get(product.marketplace, product.marketplace)}] {product.title}"]
+    if analysis and analysis.real_discount_pct:
+        lines.append(f"⚠️ {analysis.real_discount_pct:.0f}% OFF")
+    if price is not None:
+        lines.append(f"💰 R$ {price:.2f}".replace(".", ","))
+        if list_price and list_price > price:
+            inst = price / 10  # 10x sem juros aproxima o 'à vista' do marketplace
+            lines.append(f"ou R$ {inst:.2f} em 10x".replace(".", ","))
+    lines.append(f"👉 {short_url}")
+    if offer and offer.coupon_text:
+        lines.append(f"🎟️ {offer.coupon_text}")
+    lines.append("🚚 Frete grátis acima de R$ 79" if product.marketplace == "ml"
+                 else "🚚 Frete grátis no Amazon Prime")
+    lines.append("")
+    lines.append("📡 Promos do Franca")
+    return JSONResponse({
+        "text": "\n".join(lines),
+        "url": short_url,
+        "affiliate": is_aff,
+    })
+
+

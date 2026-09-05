@@ -5,6 +5,7 @@ import { Ticket, Copy, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "../lib/api"
 import { timeago } from "../lib/format"
 import { EmptyState, LoadingState, MarketBadge, Page, PageHeader } from "../components/ui"
+import { WhatsAppButton } from "../components/WhatsAppButton"
 
 const MKT_COLORS = { ml: "#b45309", amazon: "#1d4ed8" }
 
@@ -25,7 +26,7 @@ function CouponCard({ c, i }) {
       <div className="py-4 pl-7 pr-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <MarketBadge marketplace={c.marketplace} />
+            <MarketBadge code={c.marketplace} label={c.market_label} />
             <p className="mt-1 line-clamp-2 text-[13.5px] leading-snug text-slate-800">{c.description}</p>
             {c.store && <small className="text-[11px] text-slate-500">loja: {c.store}</small>}
           </div>
@@ -49,7 +50,10 @@ function CouponCard({ c, i }) {
             <span className="badge badge-good">aplicado automaticamente no link</span>
           )}
         </div>
-        <small className="mt-2 block text-[11px] text-slate-500">visto {timeago(c.last_seen)}</small>
+        <small className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+          <span>visto {timeago(c.last_seen)}</span>
+          {c.product_id ? <WhatsAppButton productId={c.product_id} label="" className="btn-secondary btn-sm !px-2.5" /> : null}
+        </small>
       </div>
     </motion.div>
   )

@@ -4,6 +4,7 @@ import { BellRing, Target, Trash2 } from "lucide-react"
 import { api } from "../lib/api"
 import { brl, timeago } from "../lib/format"
 import { EmptyState, ErrorState, LoadingState, MarketBadge, Page, PageHeader, ProductImage, Stat, StatGrid } from "../components/ui"
+import { WhatsAppButton } from "../components/WhatsAppButton"
 
 export function WatchlistPage() {
   const [items, setItems] = useState(null)
@@ -126,6 +127,7 @@ export function WatchlistPage() {
                       <Link to={`/produto/${it.product.id}`} className="btn-secondary flex-1 btn-sm">
                         Abrir análise
                       </Link>
+                      <WhatsAppButton productId={it.product.id} />
                       <CopyButton
                         text={shareText(it.product.title, it.offer.price, it.product.url)}
                         className="btn-secondary btn-sm"
