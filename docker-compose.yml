@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   evolution-api:
-    image: evoapicloud/evolution-api:2.3.7
+    image: evoapicloud/evolution-api:v2.3.7
     depends_on:
       - evolution-db
       - evolution-redis
