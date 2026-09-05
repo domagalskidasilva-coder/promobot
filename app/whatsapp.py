@@ -441,10 +441,14 @@ def next_due_slot(now: datetime | None = None) -> datetime | None:
 
 
 def sync_api_key_from_env() -> None:
-    """Na VPS, a chave da Evolution vem do env WA_API_KEY (mesma do container).
-    Espelha em app_settings para o painel conferir; nunca gera na Vercel."""
+    """Na VPS, a chave da Evolution vem do env WA_API_KEY (mesma do container;
+    aceita também PROMOBOT_WA_API_KEY). Espelha em app_settings para o painel
+    (Vercel) conferir; nunca gera na Vercel."""
+    import os
+
     from .config import get_settings
 
-    env_key = (getattr(get_settings(), "wa_api_key", "") or "").strip()
+    env_key = (os.environ.get("WA_API_KEY")
+               or getattr(get_settings(), "wa_api_key", "") or "").strip()
     if env_key:
         save_wa_settings({"wa_evolution_key": env_key})
