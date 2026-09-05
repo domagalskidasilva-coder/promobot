@@ -127,20 +127,32 @@ def connection_state(s: dict | None = None) -> str:
 
 
 def get_qr(s: dict) -> dict:
-    """QR para parear o WhatsApp do bot (chamado só a partir da VPS)."""
+    """QR para parear o WhatsApp do bot (chamado só a partir da VPS).
+
+    Após criar a instância, o Baileys demora alguns segundos para produzir o
+    QR — tenta conectar algumas vezes antes de desistir.
+    """
     try:
         return _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
     except RuntimeError as exc:
-        # instância não existe ainda: cria e tenta de novo
-        if "404" in str(exc):
-            _ev_call(s, "POST", "/instance/create", {
-                "instanceName": _instance(s),
-                "qrcode": True,
-                "integration": "WHATSAPP-BAILEYS",
-            }, timeout=30)
-            time.sleep(2)
-            return _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
-        raise
+        if "404" not in str(exc):
+            raise
+        _ev_call(s, "POST", "/instance/create", {
+            "instanceName": _instance(s),
+            "qrcode": True,
+            "integration": "WHATSAPP-BAILEYS",
+        }, timeout=30)
+    # instância nova (ou sessão reiniciando): aguarda o QR aparecer
+    for _ in range(6):
+        time.sleep(3)
+        try:
+            data = _ev_call(s, "GET", f"/instance/connect/{_instance(s)}", timeout=20)
+            if isinstance(data, dict) and (data.get("base64") or data.get("code")):
+                return data
+        except RuntimeError as exc:
+            if "404" not in str(exc):
+                raise
+    return {}
 
 
 def fetch_groups(s: dict) -> list:
