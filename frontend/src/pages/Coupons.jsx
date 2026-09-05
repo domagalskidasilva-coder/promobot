@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { Link } from "react-router-dom"
 import { Ticket, Copy, Check, ExternalLink, Loader2 } from "lucide-react"
 import { api } from "../lib/api"
 import { timeago } from "../lib/format"
@@ -25,7 +26,7 @@ function CouponCard({ c, i }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <MarketBadge marketplace={c.marketplace} />
-            <p className="mt-1 line-clamp-2 text-[13.5px] leading-snug text-white/85">{c.description}</p>
+            <p className="mt-1 line-clamp-2 text-[13.5px] leading-snug text-slate-800">{c.description}</p>
             {c.store && <small className="text-[11px] text-slate-500">loja: {c.store}</small>}
           </div>
           {c.url && (
@@ -78,7 +79,11 @@ export function CouponsPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState message="Nenhum cupom encontrado ainda — a caça roda a cada 2 horas junto com os ciclos de coleta." />
+        <EmptyState
+            icon={Ticket}
+            title="Nenhum cupom encontrado ainda"
+            description="A caça roda a cada 2 horas junto com os ciclos de coleta."
+          />
       ) : (
         <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence>
