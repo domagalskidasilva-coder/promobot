@@ -853,7 +853,8 @@ async def api_share(product_id: int, _: bool = Depends(require_login)):
     lines.append("🚚 Frete grátis acima de R$ 79" if product.marketplace == "ml"
                  else "🚚 Frete grátis no Amazon Prime")
     lines.append("")
-    lines.append("📡 Promos do Franca")
+    lines.append("PROMO$ DO FRANÇA 🇫🇷🤑 - GAMER 🎮")
+    lines.append("https://tinyurl.com/promosdofranca")
     return JSONResponse({
         "text": "\n".join(lines),
         "url": share_url,
