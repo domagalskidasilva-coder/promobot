@@ -6,9 +6,10 @@ Sem `PROMOBOT_GOOGLE_CLIENT_ID`/`SECRET` o botão some sozinho
 ## 0. Domínio promobot.shop (Hostinger → Vercel)
 
 1. Vercel: projeto → **Settings → Domains → Add** → `promobot.shop` e `www.promobot.shop`.
-2. Hostinger: painel do domínio → **DNS / Zona DNS**, remova os registros de
-   parking (A/AAAA/CNAME padrão da Hostinger) e crie:
-   - `A` · `@` · `76.76.21.21` · TTL automático
+2. Hostinger: painel do domínio → **DNS / Zona DNS**, edite os registros de
+   parking (A/AAAA/CNAME padrão da Hostinger) e deixe:
+   - `A` · `@` · `216.198.79.1` (IP recomendado pela Vercel; o legado
+     `76.76.21.21` também funciona) · TTL automático
    - `CNAME` · `www` · `cname.vercel-dns.com`
 3. Propagação costuma levar minutos a poucas horas; a Vercel emite o SSL
    automaticamente quando o DNS aponta certo (flag "Valid Configuration").
