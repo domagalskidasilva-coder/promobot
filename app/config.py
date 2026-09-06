@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     # o coletor espelha em app_settings para o painel (Vercel) conferir.
     wa_api_key: str = ""
 
+    # --- Site público (Fase 2: login Google) --------------------------------
+    # Vazias = botão Google desabilitado; /api/site/me expõe google_enabled.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # URL pública canônica (ex.: https://promos.exemplo.com). Quando vazia,
+    # o callback OAuth e o sitemap usam o host da requisição. Fixe em prod.
+    site_url: str = ""
+    # true em produção (Vercel) p/ cookie de sessão HttpOnly+Secure.
+    https_only: bool = False
+
     # --- Diversos ----------------------------------------------------------
     # false no processo coletor (VPS/Docker); true em testes e no painel Vercel.
     disable_scheduler: bool = False

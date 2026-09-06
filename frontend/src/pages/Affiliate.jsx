@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { HandCoins, Loader2, Save, ExternalLink } from "lucide-react"
 import { api } from "../lib/api"
-import { EmptyState, LoadingState, Page, PageHeader } from "../components/ui"
+import { EmptyState, ErrorState, LoadingState, Page, PageHeader } from "../components/ui"
 
 const FIELDS = [
   { key: "affiliate_amazon_tag", label: "Amazon — tag de associado",

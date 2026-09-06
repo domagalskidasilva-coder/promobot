@@ -259,6 +259,12 @@ async def run_cycle(scraper_names: list[str] | None = None) -> dict:
     with db.SessionLocal() as db_:
         stats["alerts"] += await maybe_send_instant_alert(db_)
         stats["alerts"] += await send_watch_alert(db_)
+        try:
+            from .notify.email import send_site_alerts
+
+            stats["alerts"] += await send_site_alerts(db_)
+        except Exception:
+            log.exception("Alertas do site falharam no ciclo")
 
     # caça de cupons embutida: 1 a cada 6 ciclos (páginas de cupom mudam pouco)
     global _cycle_count

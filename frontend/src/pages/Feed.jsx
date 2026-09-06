@@ -25,7 +25,7 @@ function OfferCard({ item }) {
   const { product: p, offer: o, analysis: a, market_label } = item
   return (
     <article className="card flex h-full flex-col overflow-hidden" aria-labelledby={`offer-${p.id}`}>
-      <Link to={`/produto/${p.id}`} tabIndex={-1} aria-hidden="true" className="block border-b border-slate-100">
+      <Link to={`/admin/produto/${p.id}`} tabIndex={-1} aria-hidden="true" className="block border-b border-slate-100">
         <ProductImage src={p.image_url} alt="" className="h-44 w-full" />
       </Link>
       <div className="flex flex-1 flex-col gap-2 p-4">
@@ -35,7 +35,7 @@ function OfferCard({ item }) {
           <span className="ml-auto text-xs text-slate-400">{timeago(o.updated_at)}</span>
         </div>
         <h2 id={`offer-${p.id}`} className="line-clamp-2 min-h-[2.6em] text-sm font-semibold leading-snug text-slate-900">
-          <Link to={`/produto/${p.id}`} className="hover:text-blue-800 hover:underline">
+          <Link to={`/admin/produto/${p.id}`} className="hover:text-blue-800 hover:underline">
             {p.title}
           </Link>
         </h2>
@@ -55,7 +55,7 @@ function OfferCard({ item }) {
           ) : null}
         </div>
         <div className="mt-auto grid grid-cols-[1fr_auto_auto] gap-1.5 pt-2">
-          <Link to={`/produto/${p.id}`} className="btn-secondary w-full btn-sm" aria-label={`Ver análise de ${p.title.slice(0, 60)}`}>
+          <Link to={`/admin/produto/${p.id}`} className="btn-secondary w-full btn-sm" aria-label={`Ver análise de ${p.title.slice(0, 60)}`}>
             Ver análise
           </Link>
           <WhatsAppButton productId={p.id} label="" className="btn-secondary btn-sm !px-2.5" />
@@ -412,7 +412,7 @@ export function FeedPage() {
           onRetry={() => window.location.reload()}
         />
       ) : items.length === 0 ? (
-        <NoResults onClear={hasActive ? () => setSearchParams({ sort: "hot" }) : undefined} />
+        <NoResults homeTo="/admin" onClear={hasActive ? () => setSearchParams({ sort: "hot" }) : undefined} />
       ) : view === "grid" ? (
         <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
           {items.map((d) => (
@@ -437,7 +437,7 @@ export function FeedPage() {
               {items.map((d) => (
                 <tr key={d.product.id}>
                   <td className="max-w-[320px]">
-                    <Link to={`/produto/${d.product.id}`} className="line-clamp-2 font-medium text-slate-900 hover:text-blue-800 hover:underline">
+                    <Link to={`/admin/produto/${d.product.id}`} className="line-clamp-2 font-medium text-slate-900 hover:text-blue-800 hover:underline">
                       {d.product.title}
                     </Link>
                     <span className="mt-0.5 block text-xs text-slate-500">Atualizado {timeago(d.offer.updated_at)}</span>
@@ -457,7 +457,7 @@ export function FeedPage() {
                     <ScoreBadge score={d.analysis?.score} />
                   </td>
                   <td className="text-right">
-                    <Link to={`/produto/${d.product.id}`} className="btn-secondary btn-sm whitespace-nowrap">
+                    <Link to={`/admin/produto/${d.product.id}`} className="btn-secondary btn-sm whitespace-nowrap">
                       Analisar
                     </Link>
                   </td>

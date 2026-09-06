@@ -41,7 +41,7 @@ function RankedList({ items, renderRow, emptyText }) {
       {items.map((x, i) => (
         <li key={x.key || `${i}-${x.id || x.product?.id}`}>
           <Link
-            to={`/produto/${x.id || x.product?.id}`}
+            to={`/admin/produto/${x.id || x.product?.id}`}
             className="flex items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 transition-colors hover:border-blue-300 hover:bg-blue-50/50"
           >
             <span className="w-6 shrink-0 text-xs font-bold tabular-nums text-slate-400">{String(i + 1).padStart(2, "0")}</span>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Link, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import {
   ChartNoAxesColumn,
   Eye,
   Flame,
+  Globe,
   Loader2,
   LogOut,
   Menu,
@@ -18,7 +19,7 @@ import {
   X,
   Zap,
 } from "lucide-react"
-import { api } from "./lib/api"
+import { api, site } from "./lib/api"
 import { timeago } from "./lib/format"
 import { BrandMark } from "./components/BrandMark"
 import { FeedPage } from "./pages/Feed"
@@ -31,18 +32,32 @@ import { InsightsPage } from "./pages/Insights"
 import { StoresPage } from "./pages/Stores"
 import { CouponsPage } from "./pages/Coupons"
 import { AffiliatePage } from "./pages/Affiliate"
+import { SiteSettingsPage } from "./pages/SiteSettings"
 import { WhatsAppPage } from "./pages/WhatsApp"
+import { Component } from "react"
+import { SiteShell, useSiteContext } from "./site/components"
+import { SiteHome } from "./site/SiteHome"
+import { SiteProduct } from "./site/SiteProduct"
+import { SiteCoupons, SiteStores } from "./site/SiteCollections"
+import { SiteAccount, SiteFavorites } from "./site/SitePrivate"
+import { SiteLogin } from "./site/SiteLogin"
+import { PrivacyPage, TermsPage } from "./site/Legal"
+
+// Rotas antigas do admin (sem colisão com a vitrine) redirecionam p/ /admin/*.
+// /cupons, /lojas e /produto/:id agora são a vitrine pública (documentado).
+const ADMIN_MOVED = ["watchlist", "keywords", "insights", "whatsapp", "afiliados", "status"]
 
 const NAV = [
-  { to: "/", label: "Ofertas", icon: Flame, end: true },
-  { to: "/watchlist", label: "Monitoradas", icon: Eye, end: false },
-  { to: "/keywords", label: "Palavras-chave", icon: Tag, end: false },
-  { to: "/insights", label: "Insights", icon: Sparkles, end: false },
-  { to: "/lojas", label: "Lojas", icon: StoreIcon, end: false },
-  { to: "/cupons", label: "Cupons", icon: Ticket, end: false },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, end: false },
-  { to: "/afiliados", label: "Afiliados", icon: HandCoins, end: false },
-  { to: "/status", label: "Status", icon: ChartNoAxesColumn, end: false },
+  { to: "/admin", label: "Ofertas", icon: Flame, end: true },
+  { to: "/admin/watchlist", label: "Monitoradas", icon: Eye, end: false },
+  { to: "/admin/keywords", label: "Palavras-chave", icon: Tag, end: false },
+  { to: "/admin/insights", label: "Insights", icon: Sparkles, end: false },
+  { to: "/admin/lojas", label: "Lojas", icon: StoreIcon, end: false },
+  { to: "/admin/cupons", label: "Cupons", icon: Ticket, end: false },
+  { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle, end: false },
+  { to: "/admin/afiliados", label: "Afiliados", icon: HandCoins, end: false },
+  { to: "/admin/site", label: "Site público", icon: Globe, end: false },
+  { to: "/admin/status", label: "Status", icon: ChartNoAxesColumn, end: false },
 ]
 
 function useCollector() {
@@ -162,7 +177,7 @@ function Shell({ onLogout, collector }) {
     e.preventDefault()
     const params = new URLSearchParams()
     if (query.trim()) params.set("q", query.trim())
-    navigate(`/?${params.toString()}`)
+    navigate(`/admin?${params.toString()}`)
     setMenuOpen(false)
   }
 
@@ -176,12 +191,12 @@ function Shell({ onLogout, collector }) {
 
       {/* Sidebar desktop */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-200 bg-white lg:flex">
-        <Link to="/" className="flex items-center gap-2.5 px-5 pb-5 pt-6" aria-label="Promobot — início">
+        <Link to="/admin" className="flex items-center gap-2.5 px-5 pb-5 pt-6" aria-label="Promobot — início do admin">
           <BrandMark size={36} className="h-9 w-9" alt="PromoBot" />
           <span>
             <span className="block text-[17px] font-bold leading-none tracking-tight text-slate-900">Promobot</span>
             <span className="mt-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Inteligência de preços
+              Admin
             </span>
           </span>
         </Link>
@@ -204,6 +219,10 @@ function Shell({ onLogout, collector }) {
               )}
             </button>
           </div>
+          <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+            <Globe className="h-4 w-4" aria-hidden="true" />
+            Ver site público
+          </Link>
         </div>
         <div className="border-t border-slate-200 p-3">
           <button
@@ -231,7 +250,7 @@ function Shell({ onLogout, collector }) {
             <div className="flex items-center justify-between px-4 py-4">
               <span className="flex items-center gap-2">
                 <BrandMark size={32} className="h-8 w-8" alt="PromoBot" />
-                <span className="text-base font-bold text-slate-900">Promobot</span>
+                <span className="text-base font-bold text-slate-900">Promobot · Admin</span>
               </span>
               <button
                 ref={closeRef}
@@ -333,7 +352,31 @@ function Shell({ onLogout, collector }) {
   )
 }
 
-import { Component } from "react"
+function PublicLayout() {
+  const [me, setMe] = useState(null)
+  const [settings, setSettings] = useState({})
+
+  useEffect(() => {
+    site.me().then(setMe).catch(() => setMe({ logged: false }))
+    site.settings().then(setSettings).catch(() => {})
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await site.logout()
+    } catch {
+      /* mesmo sem resposta, encerra a sessão local */
+    }
+    setMe({ logged: false })
+    window.location.href = "/"
+  }, [])
+
+  return (
+    <SiteShell me={me} disclosure={settings.affiliate_disclosure}>
+      <Outlet context={{ me, setMe, settings, onLogout: logout }} />
+    </SiteShell>
+  )
+}
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -354,6 +397,19 @@ class ErrorBoundary extends Component {
     }
     return this.props.children
   }
+}
+
+function SiteOutlet({ page }) {
+  const ctx = useSiteContext() || {}
+  const { me, settings, onLogout } = ctx
+  if (page === "home") return <SiteHome me={me} settings={settings} />
+  if (page === "product") return <SiteProduct me={me} />
+  if (page === "favorites") return <SiteFavorites me={me} />
+  if (page === "account") return <SiteAccount me={me} onLogout={onLogout} />
+  if (page === "login") return <SiteLogin me={me} />
+  if (page === "privacy") return <PrivacyPage disclosure={settings?.affiliate_disclosure} />
+  if (page === "terms") return <TermsPage disclosure={settings?.affiliate_disclosure} />
+  return null
 }
 
 export default function App() {
@@ -380,7 +436,7 @@ export default function App() {
       /* mesmo sem resposta, encerra a sessão local */
     }
     setAuth(false)
-    window.location.href = "/login"
+    window.location.href = "/admin/login"
   }, [])
 
   if (auth === null) {
@@ -388,32 +444,54 @@ export default function App() {
       <div className="grid min-h-screen place-items-center bg-slate-100" role="status" aria-label="Carregando">
         <span className="flex items-center gap-2 text-sm text-slate-600">
           <Loader2 className="h-6 w-6 animate-spin text-blue-700" aria-hidden="true" />
-          Carregando painel…
+          Carregando…
         </span>
       </div>
     )
   }
 
   return (
+    <ErrorBoundary>
     <Routes>
-      <Route path="/login" element={<LoginPage onOk={() => setAuth(true)} standalone={!auth} />} />
+      {/* Admin */}
+      <Route path="/admin/login" element={<LoginPage onOk={() => { setAuth(true); window.location.href = "/admin" }} standalone={!auth} />} />
       {auth ? (
         <Route element={<Shell onLogout={logout} collector={collector} />}>
-          <Route index element={<FeedPage />} />
-          <Route path="produto/:id" element={<ProductPage />} />
-          <Route path="watchlist" element={<WatchlistPage />} />
-          <Route path="keywords" element={<KeywordsPage />} />
-          <Route path="insights" element={<InsightsPage />} />
-          <Route path="lojas" element={<StoresPage />} />
-          <Route path="cupons" element={<CouponsPage />} />
-          <Route path="whatsapp" element={<WhatsAppPage />} />
-          <Route path="afiliados" element={<AffiliatePage />} />
-          <Route path="status" element={<StatusPage />} />
+          <Route path="/admin" element={<FeedPage />} />
+          <Route path="/admin/produto/:id" element={<ProductPage />} />
+          <Route path="/admin/watchlist" element={<WatchlistPage />} />
+          <Route path="/admin/keywords" element={<KeywordsPage />} />
+          <Route path="/admin/insights" element={<InsightsPage />} />
+          <Route path="/admin/lojas" element={<StoresPage />} />
+          <Route path="/admin/cupons" element={<CouponsPage />} />
+          <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
+          <Route path="/admin/afiliados" element={<AffiliatePage />} />
+          <Route path="/admin/site" element={<SiteSettingsPage />} />
+          <Route path="/admin/status" element={<StatusPage />} />
         </Route>
       ) : (
-        <Route path="*" element={<LoginPage onOk={() => setAuth(true)} standalone />} />
+        <Route path="/admin/*" element={<LoginPage onOk={() => { setAuth(true); window.location.href = "/admin" }} standalone />} />
       )}
+      {/* Atalhos de bookmarks antigos (sem colisão com a vitrine) */}
+      <Route path="/login" element={<Navigate to="/admin/login" replace />} />
+      {ADMIN_MOVED.map((p) => (
+        <Route key={p} path={`/${p}`} element={<Navigate to={`/admin/${p}`} replace />} />
+      ))}
+
+      {/* Site público */}
+      <Route element={<PublicLayout />}>
+        <Route index element={<SiteOutlet page="home" />} />
+        <Route path="produto/:id" element={<SiteOutlet page="product" />} />
+        <Route path="cupons" element={<SiteCoupons />} />
+        <Route path="lojas" element={<SiteStores />} />
+        <Route path="favoritos" element={<SiteOutlet page="favorites" />} />
+        <Route path="conta" element={<SiteOutlet page="account" />} />
+        <Route path="entrar" element={<SiteOutlet page="login" />} />
+        <Route path="privacidade" element={<SiteOutlet page="privacy" />} />
+        <Route path="termos" element={<SiteOutlet page="terms" />} />
+      </Route>
     </Routes>
+    </ErrorBoundary>
   )
 }
 

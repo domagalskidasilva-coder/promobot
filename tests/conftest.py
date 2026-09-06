@@ -6,6 +6,11 @@ from pathlib import Path
 os.environ["PROMOBOT_DATABASE_URL"] = f"sqlite:///{Path(__file__).parent / 'data' / 'test.db'}"
 os.environ["PROMOBOT_DISABLE_SCHEDULER"] = "true"
 os.environ["PROMOBOT_GEMINI_API_KEY"] = ""  # testes não chamam IA
+# herméticos: sem SMTP real, sem login admin (cada teste habilita se precisar)
+os.environ["PROMOBOT_SMTP_HOST"] = ""
+os.environ["PROMOBOT_EMAIL_TO"] = ""
+os.environ["PROMOBOT_AUTH_USER"] = ""
+os.environ["PROMOBOT_AUTH_PASS"] = ""
 os.environ.setdefault("PROMOBOT_SESSION_SECRET", "test-secret")
 
 import sys  # noqa: E402

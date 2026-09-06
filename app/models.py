@@ -204,3 +204,67 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+# --------------------------------------------------------------------------
+# Site público (vitrine). WatchItem continua sendo do admin/coletor.
+# Config do site (site_title, site_tagline...) reaproveita AppSetting (KV).
+# --------------------------------------------------------------------------
+class SiteUser(Base):
+    """Visitante cadastrado do site público (login Google na Fase 2)."""
+
+    __tablename__ = "site_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), default="")
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider: Mapped[str] = mapped_column(String(20), default="google")
+    provider_sub: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
+    prefs_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SiteFavorite(Base):
+    """Produto favoritado por um usuário do site."""
+
+    __tablename__ = "site_favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_sitefav_user_product"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("site_users.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SiteAlert(Base):
+    """Alerta de preço por usuário do site (avaliado pelo coletor)."""
+
+    __tablename__ = "site_alerts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_sitealert_user_product"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("site_users.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SiteClick(Base):
+    """Clique no redirect afiliado /r/{product_id} (analytics)."""
+
+    __tablename__ = "site_clicks"
+    __table_args__ = (Index("ix_site_clicks_product_time", "product_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("site_users.id"), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

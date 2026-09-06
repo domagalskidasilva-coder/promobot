@@ -110,7 +110,7 @@ export function EmptyState({ icon: Icon = Inbox, title, description, action }) {
   )
 }
 
-export function NoResults({ onClear }) {
+export function NoResults({ onClear, homeTo = "/" }) {
   return (
     <EmptyState
       icon={SearchX}
@@ -122,7 +122,7 @@ export function NoResults({ onClear }) {
             Limpar filtros
           </button>
         ) : (
-          <Link to="/" className="btn-secondary">
+          <Link to={homeTo} className="btn-secondary">
             Ver todas as ofertas
           </Link>
         )

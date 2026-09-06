@@ -59,7 +59,7 @@ export function WatchlistPage() {
           title="Nenhum produto monitorado"
           description="Abra uma oferta e defina um preço-alvo para começar a acompanhar."
           action={
-            <Link to="/" className="btn">
+            <Link to="/admin" className="btn">
               Ver ofertas
             </Link>
           }
@@ -88,7 +88,7 @@ export function WatchlistPage() {
                       <BellRing className="h-3.5 w-3.5" aria-hidden="true" /> Atingiu o preço-alvo
                     </p>
                   ) : null}
-                  <Link to={`/produto/${it.product.id}`} tabIndex={-1} aria-hidden="true" className="block border-b border-slate-100">
+                  <Link to={`/admin/produto/${it.product.id}`} tabIndex={-1} aria-hidden="true" className="block border-b border-slate-100">
                     <ProductImage src={it.product.image_url} alt="" className="h-36 w-full" />
                   </Link>
                   <div className="space-y-2 p-4">
@@ -97,7 +97,7 @@ export function WatchlistPage() {
                       <span className="ml-auto text-xs text-slate-400">{timeago(it.offer.updated_at)}</span>
                     </div>
                     <h2 className="line-clamp-2 min-h-[2.6em] text-sm font-semibold leading-snug">
-                      <Link to={`/produto/${it.product.id}`} className="hover:text-blue-800 hover:underline">
+                      <Link to={`/admin/produto/${it.product.id}`} className="hover:text-blue-800 hover:underline">
                         {it.product.title}
                       </Link>
                     </h2>
@@ -124,7 +124,7 @@ export function WatchlistPage() {
                       </div>
                     </dl>
                     <div className="flex gap-2 pt-1">
-                      <Link to={`/produto/${it.product.id}`} className="btn-secondary flex-1 btn-sm">
+                      <Link to={`/admin/produto/${it.product.id}`} className="btn-secondary flex-1 btn-sm">
                         Abrir análise
                       </Link>
                       <WhatsAppButton productId={it.product.id} />

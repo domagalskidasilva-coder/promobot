@@ -18,9 +18,18 @@ import aiosmtplib
 from sqlalchemy import select
 
 from ..config import get_settings
-from ..models import Analysis, Offer, Product, WatchItem, utcnow
+from ..models import Analysis, Offer, Product, SiteAlert, SiteUser, WatchItem, utcnow
 
 log = logging.getLogger("promobot.notify")
+
+
+def _as_aware(dt):
+    """SQLite devolve datetimes naive; Postgres, aware. Normaliza p/ comparar."""
+    from datetime import timezone
+
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 _last_instant_sent_at = None  # rate limit simples por processo
 
@@ -86,13 +95,20 @@ def _offer_html(p: Product, o: Offer, a: Analysis) -> str:
 
 async def _send_email(subject: str, html: str) -> bool:
     settings = get_settings()
+    return await _send_email_to(settings.email_to, subject, html)
+
+
+async def _send_email_to(to: str, subject: str, html: str) -> bool:
+    settings = get_settings()
     if not settings.email_configured:
         log.info("SMTP não configurado — e-mail suprimido: %s", subject)
+        return False
+    if not to:
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = formataddr(("Promobot", settings.smtp_user))
-    msg["To"] = settings.email_to
+    msg["To"] = to
     msg.set_content("Seu leitor não suporta HTML.")
     msg.add_alternative(html, subtype="html")
     try:
@@ -132,7 +148,7 @@ def _hot_candidates(db_) -> list[tuple[Product, Offer, Analysis]]:
         )
         if not hot:
             continue
-        if a.notified_at and a.notified_at > cutoff:
+        if a.notified_at and _as_aware(a.notified_at) > cutoff:
             # repetir só se o preço caiu além do extra_drop
             if a.notified_price and o.price > a.notified_price * (1 - extra_drop):
                 continue
@@ -193,7 +209,7 @@ async def send_watch_alert(db_) -> int:
         for w, o, p in rows
         if w.target_price is not None
         and o.price <= w.target_price
-        and not (w.last_alerted_at and w.last_alerted_at > cutoff)
+        and not (w.last_alerted_at and _as_aware(w.last_alerted_at) > cutoff)
     ]
     if not hits:
         return 0
@@ -218,6 +234,65 @@ async def send_watch_alert(db_) -> int:
 
 def run_async(coro) -> None:  # helper para uso fora do event loop
     asyncio.run(coro)
+
+
+async def send_site_alerts(db_) -> int:
+    """Alertas de preço do site público: 1 e-mail por usuário (máx. 1/24h por item).
+
+    Roda no coletor (pipeline), nunca na Vercel. Sem SMTP configurado, retorna 0.
+    """
+    settings = get_settings()
+    if not settings.email_configured:
+        return 0
+    cutoff = utcnow() - timedelta(hours=24)
+    rows = (
+        db_.execute(
+            select(SiteAlert, Offer, Product, SiteUser)
+            .join(Offer, SiteAlert.product_id == Offer.product_id)
+            .join(Product, SiteAlert.product_id == Product.id)
+            .join(SiteUser, SiteAlert.user_id == SiteUser.id)
+            .where(SiteUser.is_active.is_(True), SiteAlert.target_price.is_not(None))
+        )
+        .all()
+    )
+    hits = [
+        (a, o, p, u)
+        for a, o, p, u in rows
+        if o.price <= (a.target_price or float("inf"))
+        and not (a.last_sent_at and _as_aware(a.last_sent_at) > cutoff)
+    ]
+    if not hits:
+        return 0
+    base = (settings.site_url.rstrip("/") if settings.site_url else "")
+
+    def _link(p: Product) -> str:
+        return f"{base}/r/{p.id}?src=email" if base else p.url
+
+    by_user: dict[int, dict] = {}
+    for a, o, p, u in hits:
+        by_user.setdefault(u.id, {"user": u, "items": []})["items"].append((a, o, p))
+    sent = 0
+    for entry in by_user.values():
+        u = entry["user"]
+        body = "".join(
+            f"""
+            <div style="border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:12px">
+              <b>🎯 {p.title[:150]}</b><br>
+              Preço atual: <b>R$ {o.price:.2f}</b> · seu alvo: R$ {a.target_price:.2f}<br>
+              <a href="{_link(p)}">Ver oferta →</a>
+            </div>"""
+            for a, o, p in entry["items"]
+        )
+        ok = await _send_email_to(
+            u.email, f"🎯 Promobot: {len(entry['items'])} alerta(s) de preço", body
+        )
+        if ok:
+            for a, _o, _p in entry["items"]:
+                a.last_sent_at = utcnow()
+            sent += len(entry["items"])
+    if sent:
+        db_.commit()
+    return sent
 
 
 async def send_daily_digest(db_) -> int:

@@ -69,7 +69,7 @@ export function ProductPage() {
   if (failed) {
     return (
       <Page>
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
+        <Link to="/admin" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar às ofertas
         </Link>
         <ErrorState
@@ -116,7 +116,7 @@ export function ProductPage() {
 
   return (
     <Page labelledBy="page-title">
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
+      <Link to="/admin" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar às ofertas
       </Link>
 

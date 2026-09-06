@@ -20,6 +20,7 @@ from ..config import get_settings
 from ..models import (
     Analysis,
     AppControl,
+    AppSetting,
     Coupon,
     Store,
     EventLog,
@@ -34,6 +35,18 @@ from ..models import (
 router = APIRouter()
 
 MARKET_LABEL = {"ml": "Mercado Livre", "amazon": "Amazon"}
+
+# Chaves de AppSetting que configuram o site público (editáveis em /admin/site,
+# lidas sem login em /api/site/settings). Definidas aqui para evitar import
+# circular: public.py importa deste módulo.
+SITE_PUBLIC_KEYS = (
+    "site_title",
+    "site_tagline",
+    "hero_text",
+    "whatsapp_url",
+    "affiliate_disclosure",
+    "cookie_text",
+)
 
 def require_login(request: Request):
     settings = get_settings()
@@ -223,7 +236,7 @@ async def api_offers(marketplace: str | None = None, q: str | None = None,
 
 
 @router.get("/api/product/{product_id}")
-async def api_product(product_id: int, period: str = "all"):
+async def api_product(product_id: int, period: str = "all", _: bool = Depends(require_login)):
     days = {"7": 7, "30": 30, "90": 90}.get(period)
     with db.SessionLocal() as db_:
         product = db_.get(Product, product_id)
@@ -771,6 +784,33 @@ async def api_affiliate_save(request: Request, body: dict, _: bool = Depends(req
                 row.value = v
         db_.commit()
     invalidate_cache()
+    return JSONResponse({"ok": True})
+
+
+@router.get("/api/site-settings")
+async def api_site_settings_get(_: bool = Depends(require_login)):
+    """Textos do site público (mesmo KV da página Afiliados)."""
+    with db.SessionLocal() as db_:
+        rows = db_.execute(
+            select(AppSetting.key, AppSetting.value).where(AppSetting.key.in_(SITE_PUBLIC_KEYS))
+        ).all()
+        out = {k: "" for k in SITE_PUBLIC_KEYS}
+        for k, v in rows:
+            out[k] = v or ""
+        return JSONResponse(out)
+
+
+@router.post("/api/site-settings")
+async def api_site_settings_save(body: dict, _: bool = Depends(require_login)):
+    allowed = {k: str((body or {}).get(k, "")).strip()[:2000] for k in SITE_PUBLIC_KEYS if k in (body or {})}
+    with db.SessionLocal() as db_:
+        for k, v in allowed.items():
+            row = db_.get(AppSetting, k)
+            if row is None:
+                db_.add(AppSetting(key=k, value=v))
+            else:
+                row.value = v
+        db_.commit()
     return JSONResponse({"ok": True})
 
 

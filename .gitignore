@@ -10,3 +10,4 @@ frontend/dist/
 .vercel
 vercel-env.txt
 leads-bot/
+.zcode/

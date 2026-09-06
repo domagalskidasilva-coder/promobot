@@ -13,10 +13,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://127.0.0.1:8777',
+      '/auth': 'http://127.0.0.1:8777',
+      '/r': 'http://127.0.0.1:8777',
       '/login': 'http://127.0.0.1:8777',
       '/logout': 'http://127.0.0.1:8777',
-      '/watchlist': 'http://127.0.0.1:8777',
-      '/keywords': 'http://127.0.0.1:8777',
       '/buscar-agora': 'http://127.0.0.1:8777',
     },
   },
